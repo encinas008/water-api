@@ -1,0 +1,49 @@
+services:
+  postgres:
+    restart: always
+    container_name: pos-db
+    image: 'postgres:16.0'
+    environment:
+      POSTGRES_USER: 'postgres'
+      POSTGRES_PASSWORD: 'admin008'
+      PGDATA: '/data/postgres'
+    volumes:
+      - './compose/postgres:/data'
+    ports:
+      - '5432:5432'
+
+  pos-ui:
+    restart: always
+    container_name: pos-ui
+    image: 'encinas008/pos-ui:1.0.0'
+    volumes:
+      - './shared-data:/usr/share/nginx/html/assets/images'
+    ports:
+      - '4200:80'
+
+  pos-api:
+    restart: always
+    container_name: pos-api
+    depends_on:
+      - postgres
+    image: 'encinas008/pos-api:1.0.0'
+    ports:
+      - '8085:8085'
+    environment:
+      SPRING_PROFILES_ACTIVE: 'prod'
+      SERVER_PORT: '8085'
+      SPRING_DATASOURCE_URL: 'jdbc:postgresql://192.168.1.9:5432/dreamsbo?currentSchema=pos'
+      SPRING_DATASOURCE_USERNAME: 'postgres'
+      SPRING_DATASOURCE_PASSWORD: 'admin008'
+      IMAGES_CLIENT_APPLICATION_PATH: '/usr/share/nginx/html'
+      IMAGES_CLIENT_APPLICATION_STORE_PATH: '/assets/images/'
+      IMAGES_CLIENT_APPLICATION_ACCESS_PATH: '/assets/images/'
+      TOKEN_VALIDITY_IN_SECONDS: 3600
+      REFRESH_TOKEN_VALIDITY_IN_SECONDS: 5400
+      TIME_ZONE: 'UTC+4'
+      EXPIRE_MEDICAL_HISTORY_IN_HOURS: 72
+    volumes_from:
+      - pos-ui:rw
+
+volumes:
+  shared-data:

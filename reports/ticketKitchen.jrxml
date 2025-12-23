@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Created with Jaspersoft Studio version 7.0.1.final using JasperReports Library version 6.20.6  -->
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd" name="comandas" pageWidth="226" pageHeight="425" columnWidth="186" leftMargin="20" rightMargin="20" topMargin="20" bottomMargin="20" isIgnorePagination="true" uuid="89ea8d65-c6e3-4f2d-a298-c96bd6234f03">
+	<property name="com.jaspersoft.studio.data.defaultdataadapter" value="One Empty Record"/>
+	<property name="com.jaspersoft.studio.unit." value="pixel"/>
+	<property name="com.jaspersoft.studio.unit.topMargin" value="pixel"/>
+	<property name="com.jaspersoft.studio.unit.bottomMargin" value="pixel"/>
+	<property name="com.jaspersoft.studio.unit.leftMargin" value="pixel"/>
+	<property name="com.jaspersoft.studio.unit.rightMargin" value="pixel"/>
+	<property name="com.jaspersoft.studio.unit.columnWidth" value="pixel"/>
+	<property name="com.jaspersoft.studio.unit.columnSpacing" value="pixel"/>
+	<subDataset name="DetailComanda" uuid="0b9986e0-4fe3-4cc7-aaa1-12cd9165b049">
+		<queryString>
+			<![CDATA[]]>
+		</queryString>
+		<field name="quantity" class="java.math.BigDecimal"/>
+		<field name="name" class="java.lang.String"/>
+		<field name="shortCategoryName" class="java.lang.String"/>
+	</subDataset>
+	<parameter name="orderNumber" class="java.lang.String"/>
+	<parameter name="orderFor" class="java.lang.String"/>
+	<parameter name="createdAt" class="java.lang.String"/>
+	<parameter name="productsDetail" class="net.sf.jasperreports.engine.data.JRBeanCollectionDataSource"/>
+	<queryString>
+		<![CDATA[]]>
+	</queryString>
+	<title>
+		<band height="43" splitType="Stretch">
+			<staticText>
+				<reportElement x="3" y="2" width="181" height="28" uuid="a55e2389-de26-42a4-a04c-5cdefe651927">
+					<property name="com.jaspersoft.studio.unit.height" value="px"/>
+				</reportElement>
+				<textElement textAlignment="Center" verticalAlignment="Middle">
+					<font fontName="FreeSans" size="18" isBold="true" isItalic="false" isUnderline="true" pdfFontName="Helvetica-Bold"/>
+				</textElement>
+				<text><![CDATA[POLLOS AMBORO]]></text>
+			</staticText>
+			<line>
+				<reportElement x="0" y="40" width="185" height="1" uuid="faf4b21d-d6f9-44bd-8c7c-72ce46d254ac">
+					<property name="com.jaspersoft.studio.unit.width" value="px"/>
+				</reportElement>
+				<graphicElement>
+					<pen lineStyle="Dotted"/>
+				</graphicElement>
+			</line>
+		</band>
+	</title>
+	<columnHeader>
+		<band height="62" splitType="Stretch">
+			<staticText>
+				<reportElement x="0" y="0" width="54" height="20" uuid="77ee0186-66fc-417e-b456-f856a2fa04d4"/>
+				<textElement verticalAlignment="Middle">
+					<font fontName="FreeSans" isBold="false" pdfFontName="Helvetica-Bold"/>
+				</textElement>
+				<text><![CDATA[Pedido:]]></text>
+			</staticText>
+			<textField>
+				<reportElement x="54" y="0" width="126" height="20" uuid="d763ede8-132d-4bc0-af8d-81c3723c0044"/>
+				<textElement verticalAlignment="Middle">
+					<font fontName="FreeSans" size="12" isBold="true"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$P{orderNumber}]]></textFieldExpression>
+			</textField>
+			<line>
+				<reportElement x="0" y="57" width="185" height="1" uuid="4fbe8965-47b4-493c-a45d-e00e3e266d85"/>
+				<graphicElement>
+					<pen lineStyle="Solid"/>
+				</graphicElement>
+			</line>
+			<textField>
+				<reportElement x="55" y="37" width="125" height="20" uuid="ddf7ad1c-7c95-4801-b0d5-5974d2054079"/>
+				<textElement verticalAlignment="Middle">
+					<font fontName="FreeSans"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$P{createdAt}]]></textFieldExpression>
+			</textField>
+			<textField>
+				<reportElement x="0" y="20" width="130" height="20" uuid="597e0c2d-4e6c-4cd7-85cb-1987111fb9d0"/>
+				<textElement verticalAlignment="Middle">
+					<font fontName="FreeSans" size="12" isBold="true"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$P{orderFor}]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement x="0" y="37" width="54" height="20" uuid="f8518128-da08-43fe-af7c-83a4f0198cca"/>
+				<textElement verticalAlignment="Middle">
+					<font fontName="FreeSans" isBold="false" pdfFontName="Helvetica-Bold"/>
+				</textElement>
+				<text><![CDATA[Fecha:]]></text>
+			</staticText>
+		</band>
+	</columnHeader>
+	<detail>
+		<band height="39" splitType="Stretch">
+			<staticText>
+				<reportElement x="0" y="0" width="28" height="18" uuid="c748d428-9160-4ecc-aa4a-818240941d2a"/>
+				<textElement>
+					<font fontName="FreeSans" isBold="true" pdfFontName="Helvetica-Bold"/>
+				</textElement>
+				<text><![CDATA[Cant.]]></text>
+			</staticText>
+			<staticText>
+				<reportElement x="81" y="-2" width="36" height="19" uuid="185bb78e-de4a-4454-87a1-319e61775fda"/>
+				<textElement verticalAlignment="Middle">
+					<font fontName="FreeSans" isBold="true" pdfFontName="Helvetica-Bold"/>
+				</textElement>
+				<text><![CDATA[Detalle]]></text>
+			</staticText>
+			<line>
+				<reportElement x="-1" y="18" width="190" height="1" uuid="4d250f47-aef1-4326-a6c3-d7762a4f1282"/>
+				<graphicElement>
+					<pen lineStyle="Dotted"/>
+				</graphicElement>
+			</line>
+			<componentElement>
+				<reportElement x="0" y="19" width="180" height="20" uuid="7734c53c-e423-4004-8ace-5f57294aca2c">
+					<property name="com.jaspersoft.studio.unit.height" value="px"/>
+				</reportElement>
+				<jr:list xmlns:jr="http://jasperreports.sourceforge.net/jasperreports/components" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports/components http://jasperreports.sourceforge.net/xsd/components.xsd" printOrder="Vertical">
+					<datasetRun subDataset="DetailComanda" uuid="63c27d3c-f956-453a-be5b-efd75319e3ee">
+						<dataSourceExpression><![CDATA[$P{productsDetail}]]></dataSourceExpression>
+					</datasetRun>
+					<jr:listContents height="20" width="180">
+						<textField>
+							<reportElement x="0" y="0" width="40" height="19" uuid="302a4cf7-c5c2-48ef-a382-17a953424458"/>
+							<textElement>
+								<font fontName="SansSerif"/>
+							</textElement>
+							<textFieldExpression><![CDATA[$F{quantity}]]></textFieldExpression>
+						</textField>
+						<textField>
+							<reportElement x="60" y="0" width="120" height="19" uuid="3c36ae86-fa33-4f2d-af01-cb16fd4c46d7"/>
+							<textElement>
+								<font fontName="SansSerif"/>
+							</textElement>
+							<textFieldExpression><![CDATA[$F{name}]]></textFieldExpression>
+						</textField>
+						<textField>
+							<reportElement x="40" y="0" width="20" height="19" uuid="5a65c02d-6b93-4b4c-a94a-f94f72a59bd8">
+								<property name="com.jaspersoft.studio.unit.width" value="px"/>
+							</reportElement>
+							<textElement>
+								<font fontName="SansSerif"/>
+							</textElement>
+							<textFieldExpression><![CDATA[$F{shortCategoryName}]]></textFieldExpression>
+						</textField>
+					</jr:listContents>
+				</jr:list>
+			</componentElement>
+		</band>
+	</detail>
+</jasperReport>

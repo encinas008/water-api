@@ -1,0 +1,11 @@
+spring:
+  profiles:
+    active: "dev"
+
+server:
+  servlet:
+    context-path: "/api"
+
+print:
+  medical-prescription:
+    orientation: ${PRINT_MEDICAL_PRESCRIPTION_ORIENTATION:vertical}

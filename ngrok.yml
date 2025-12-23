@@ -1,0 +1,9 @@
+version: "2"
+authtoken: '3qREW6Q8UXtij7YtDW4sM_7j8T617sCGLAVTFJuWvA'
+web_addr: localhost:4040
+tunnels:
+  my-load-balanced-website:
+    labels:
+      - env=prod
+      - team=infra
+    addr: 8000
