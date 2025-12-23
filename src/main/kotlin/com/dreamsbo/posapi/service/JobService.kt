@@ -40,7 +40,8 @@ class JobService(
         val job = JobEntity(
             name = input.name,
             startDate = input.startDate,
-            description = input.description
+            description = input.description,
+            fine = input.fine
         )
 
         val savedJob = jobRepository.save(job)
@@ -85,6 +86,7 @@ class JobService(
             name = entity.name,
             startDate = entity.startDate,
             description = entity.description,
+            fine = entity.fine,
             active = entity.active,
             createdAt = entity.createdAt,
             updatedAt = entity.updatedAt

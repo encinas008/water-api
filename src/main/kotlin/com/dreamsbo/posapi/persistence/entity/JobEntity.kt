@@ -26,6 +26,9 @@ data class JobEntity(
     @Column(name = "description", columnDefinition = "TEXT")
     var description: String = "",
 
+    @Column(name = "fine", precision = 19, scale = 2)
+    var fine: java.math.BigDecimal? = null,
+
     var createdAt: OffsetDateTime = OffsetDateTime.now(),
     var updatedAt: OffsetDateTime? = null,
     var active: Boolean = true,
