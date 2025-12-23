@@ -1,13 +1,13 @@
 # Application
 server:
-  port: 8085
+  port: ${SERVER_PORT:5000}
 
 # Database
 spring:
   datasource:
-    url: ${SPRING_DATASOURCE_URL}
-    username: ${SPRING_DATASOURCE_USERNAME}
-    password: ${SPRING_DATASOURCE_PASSWORD}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://db-dreamsbo.clptcbmsch2x.us-east-1.rds.amazonaws.com:5432/dreamsbo?currentSchema=pos}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
   jpa:
     hibernate:
       ddl-auto: none
@@ -17,8 +17,6 @@ spring:
         temp:
           use_jdbc_metadata_defaults: false
         format_sql: true
-        jdbc:
-          time_zone: ${TIME_ZONE:UTC+4}
     show-sql: false
   servlet:
     multipart:
@@ -31,9 +29,9 @@ spring:
 security:
   authentication:
     jwt:
-      secret: 'c29tZXJhbmRvbWtleXdoaWNoaXNsb25nZW5vdWdodG9hbGlnbndpdGh0aGVqd3RzcGVjaWZpY2F0aW9u'
-      token-validity-in-seconds: ${TOKEN_VALIDITY_IN_SECONDS:604800}
-      refresh-token-validity-in-seconds: ${REFRESH_TOKEN_VALIDITY_IN_SECONDS:907200}
+      secret: ${JWT_SECRET:c29tZXJhbmRvbWtleXdoaWNoaXNsb25nZW5vdWdodG9hbGlnbndpdGh0aGVqd3RzcGVjaWZpY2F0aW9u}
+      token-validity-in-seconds: ${TOKEN_VALIDITY_IN_SECONDS:86400}
+      token-validity-in-seconds-for-remember-me: ${REFRESH_TOKEN_VALIDITY_IN_SECONDS:2592000}
 
 # Cloud AWS
 cloud:
@@ -49,18 +47,9 @@ cloud:
     file:
       expiration-in-seconds: ${AWS_FILE_EXPIRATION_IN_SECONDS:604800}
 
-# Images
-images:
-  client-application:
-    path: ${IMAGES_CLIENT_APPLICATION_PATH}
-  store:
-    path: ${IMAGES_CLIENT_APPLICATION_STORE_PATH}
-  access:
-    path: ${IMAGES_CLIENT_APPLICATION_ACCESS_PATH}
-
 application:
   bucket:
-    name: 'pos-storage'
+    name: ${AWS_BUCKET_NAME:pos-storage}
 
 logging:
   level:
@@ -68,6 +57,3 @@ logging:
       springframework:
         web: debug
 
-expire:
-  medical-histories:
-    hours: ${EXPIRE_MEDICAL_HISTORY_IN_HOURS:24}
