@@ -1,0 +1,73 @@
+# Application
+server:
+  port: ${SERVER_PORT:8085}
+
+# Database
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/dreamsbo?currentSchema=pos}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:admin008}
+  jpa:
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        dialect: 'org.hibernate.dialect.PostgreSQLDialect'
+        temp:
+          use_jdbc_metadata_defaults: false
+        format_sql: true
+        jdbc:
+          time_zone: 'UTC+4'
+    show-sql: false
+  servlet:
+    multipart:
+      enabled: true
+      file-size-threshold: 2MB
+      max-file-size: 5MB
+      max-request-size: 10MB
+
+# Security
+security:
+  authentication:
+    jwt:
+      secret: 'c29tZXJhbmRvbWtleXdoaWNoaXNsb25nZW5vdWdodG9hbGlnbndpdGh0aGVqd3RzcGVjaWZpY2F0aW9u'
+      token-validity-in-seconds: ${TOKEN_VALIDITY_IN_SECONDS:604800}
+      refresh-token-validity-in-seconds: ${REFRESH_TOKEN_VALIDITY_IN_SECONDS:907200}
+
+# Cloud AWS
+cloud:
+  aws:
+    enabled: false
+    credentials:
+      access-key: ${AWS_ACCESS_KEY_ID:}
+      secret-key: ${AWS_SECRET_ACCESS_KEY:}
+    region:
+      static: ''
+    stack:
+      auto: false
+    file:
+      expiration-in-seconds: 604800
+
+# Images
+images:
+  client-application:
+    path: ${IMAGES_CLIENT_APPLICATION_PATH:/home/rafaworkspace/projects/pos-ui}
+  store:
+    path: ${IMAGES_CLIENT_APPLICATION_STORE_PATH:/src/assets/images/}
+  access:
+    path: ${IMAGES_CLIENT_APPLICATION_ACCESS_PATH:/assets/images/}
+
+application:
+  bucket:
+    name: 'pos-storage'
+
+logging:
+  level:
+    org:
+      springframework:
+        web: debug
+
+expire:
+  medical-histories:
+    hours: ${EXPIRE_MEDICAL_HISTORY_IN_HOURS:72}
