@@ -7,6 +7,7 @@ import java.util.*
 
 data class PartnerOutputDto(
     val id: UUID,
+    val partnerNumber: Long?,
     val fullName: String,
     val partnerIdentificationNumber: String,
     val cel: String?,

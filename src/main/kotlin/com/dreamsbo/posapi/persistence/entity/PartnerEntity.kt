@@ -17,6 +17,9 @@ data class PartnerEntity(
     @Column(name = "partner_id")
     var id: UUID = UUID.randomUUID(),
 
+    @Column(name = "partner_number", unique = true, insertable = false, updatable = false)
+    var partnerNumber: Long? = null,
+
     @Column(name = "full_name")
     var fullName: String,
 

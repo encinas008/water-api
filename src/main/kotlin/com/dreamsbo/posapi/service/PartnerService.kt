@@ -1,6 +1,5 @@
 package com.dreamsbo.posapi.service
 
-import com.dreamsbo.posapi.common.errorhandler.BadRequestException
 import com.dreamsbo.posapi.common.errorhandler.NotFoundEntityException
 import com.dreamsbo.posapi.dto.*
 import com.dreamsbo.posapi.persistence.entity.PartnerEntity
@@ -63,7 +62,11 @@ class PartnerService(
         )
 
         val savedPartner = partnerRepository.save(partner)
-        return toPartnerOutputDto(savedPartner)
+        // Forzar flush para que PostgreSQL genere el partner_number
+        partnerRepository.flush()
+        // Recargar la entidad para obtener el partner_number generado
+        val refreshedPartner = partnerRepository.findById(savedPartner.id).orElse(savedPartner)
+        return toPartnerOutputDto(refreshedPartner)
     }
 
     @Transactional
@@ -120,7 +123,7 @@ class PartnerService(
         val partner = partnerEntity.get()
         partner.connectionStatus = connectionStatusTypeRepository.findByCodeAndActive(input.connectionStatusCode, true)
             .orElseThrow { NotFoundEntityException("Estado de conexión no encontrado: ${input.connectionStatusCode}") }
-        
+
         partner.updatedAt = OffsetDateTime.now()
 
         val updatedPartner = partnerRepository.save(partner)
@@ -135,12 +138,14 @@ class PartnerService(
 
         val partner = partnerEntity.get()
         val bills = waterBillRepository.findByPartnerIdAndActive(id, true, Sort.unsorted())
-        
+
         val pendingBills = bills.filter { it.status.code in listOf("PENDING", "PARTIAL_PAID", "OVERDUE") }
-        val overdueBills = bills.filter { it.status.code == "OVERDUE" || (it.dueDate.isBefore(LocalDate.now()) && it.status.code != "PAID") }
+        val overdueBills =
+            bills.filter { it.status.code == "OVERDUE" || (it.dueDate.isBefore(LocalDate.now()) && it.status.code != "PAID") }
         val totalPendingAmount = pendingBills.sumOf { it.remainingBalance }
 
-        val payments = waterPaymentRepository.findByPartnerIdAndActive(id, true, Sort.by(Sort.Direction.DESC, "paymentDate"))
+        val payments =
+            waterPaymentRepository.findByPartnerIdAndActive(id, true, Sort.by(Sort.Direction.DESC, "paymentDate"))
         val lastPaymentDate = payments.firstOrNull()?.paymentDate
 
         return PartnerDebtSummaryDto(
@@ -159,11 +164,11 @@ class PartnerService(
 
     fun searchPartners(query: String): List<PartnerOutputDto> {
         val allPartners = partnerRepository.findAllByActive(true, Sort.by(Sort.Direction.DESC, "createdAt"))
-        
+
         val filteredPartners = allPartners.filter {
             it.fullName.contains(query, ignoreCase = true) ||
-            it.partnerIdentificationNumber.contains(query, ignoreCase = true) ||
-            it.waterConnectionNumber?.contains(query, ignoreCase = true) == true
+                    it.partnerIdentificationNumber.contains(query, ignoreCase = true) ||
+                    it.waterConnectionNumber?.contains(query, ignoreCase = true) == true
         }
 
         return filteredPartners.map { toPartnerOutputDto(it) }
@@ -172,6 +177,7 @@ class PartnerService(
     private fun toPartnerOutputDto(entity: PartnerEntity): PartnerOutputDto {
         return PartnerOutputDto(
             id = entity.id,
+            partnerNumber = entity.partnerNumber,
             fullName = entity.fullName,
             partnerIdentificationNumber = entity.partnerIdentificationNumber,
             cel = entity.cellphone,
