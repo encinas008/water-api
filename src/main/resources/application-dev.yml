@@ -35,20 +35,6 @@ security:
       token-validity-in-seconds: ${TOKEN_VALIDITY_IN_SECONDS:604800}
       refresh-token-validity-in-seconds: ${REFRESH_TOKEN_VALIDITY_IN_SECONDS:907200}
 
-# Cloud AWS
-cloud:
-  aws:
-    enabled: false
-    credentials:
-      access-key: ${AWS_ACCESS_KEY_ID:}
-      secret-key: ${AWS_SECRET_ACCESS_KEY:}
-    region:
-      static: ''
-    stack:
-      auto: false
-    file:
-      expiration-in-seconds: 604800
-
 # Images
 images:
   client-application:
