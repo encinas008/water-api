@@ -44,6 +44,13 @@ data class MeetingAttendanceByDateDto(
 data class BulkMeetingAttendanceInputDto(
     val meetingId: UUID,
     val attendanceDate: LocalDate,
-    val attendances: List<PartnerAttendanceDto>
+    val attendances: List<PartnerMeetingAttendanceDto>
+)
+
+data class PartnerMeetingAttendanceDto(
+    val partnerId: UUID,
+    val present: Boolean,
+    val checkInTime: OffsetDateTime? = null,
+    val checkOutTime: OffsetDateTime? = null
 )
 

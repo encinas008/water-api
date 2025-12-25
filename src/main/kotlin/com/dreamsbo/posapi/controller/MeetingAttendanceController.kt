@@ -49,5 +49,26 @@ class MeetingAttendanceController(
     fun deleteAttendance(@PathVariable meetingId: UUID, @PathVariable id: UUID) {
         meetingAttendanceService.deleteAttendance(id)
     }
+
+    // Endpoints para reemplazar funcionalidad de MeetingPartnerController
+    @GetMapping("/assignments")
+    fun getMeetingWithPartnerAssignments(@PathVariable meetingId: UUID): MeetingPartnerAssignmentDto {
+        return meetingAttendanceService.getMeetingWithPartnerAssignments(meetingId)
+    }
+
+    @PostMapping("/assign-partners")
+    @ResponseStatus(HttpStatus.OK)
+    fun assignPartnersToMeeting(
+        @PathVariable meetingId: UUID,
+        @RequestBody input: AssignPartnersToMeetingDto
+    ): List<MeetingAttendanceOutputDto> {
+        return meetingAttendanceService.assignPartnersToMeeting(meetingId, input)
+    }
+
+    @DeleteMapping("/partner/{partnerId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    fun removePartnerFromMeeting(@PathVariable meetingId: UUID, @PathVariable partnerId: UUID) {
+        meetingAttendanceService.removePartnerFromMeeting(meetingId, partnerId)
+    }
 }
 

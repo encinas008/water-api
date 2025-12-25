@@ -84,6 +84,7 @@ data class WaterBillOutputDto(
     val paidDate: LocalDate?,
     val isOverdue: Boolean,
     val concepts: List<BillConceptItemDto> = emptyList(),  // Conceptos de cobro desglosados
+    val totalFinesPaid: BigDecimal = BigDecimal.ZERO,  // Total de multas pagadas en esta factura
     val createdAt: OffsetDateTime,
     val updatedAt: OffsetDateTime?
 )
@@ -109,7 +110,24 @@ data class WaterPaymentInputDto(
     val amount: BigDecimal,
     val paymentTypeId: UUID,
     val cashBalanceId: UUID?,
-    val observation: String = ""
+    val observation: String = "",
+    val includePendingFines: Boolean = false // Si incluir multas pendientes del mes
+)
+
+data class PaymentFineDetailDto(
+    val id: UUID,
+    val type: String, // "JOB" o "MEETING"
+    val name: String,
+    val date: LocalDate,
+    val fineAmount: BigDecimal
+)
+
+data class PaymentDetailDto(
+    val billAmount: BigDecimal,
+    val finesAmount: BigDecimal,
+    val totalAmount: BigDecimal,
+    val jobFines: List<PaymentFineDetailDto> = emptyList(),
+    val meetingFines: List<PaymentFineDetailDto> = emptyList()
 )
 
 data class WaterPaymentOutputDto(
@@ -124,6 +142,7 @@ data class WaterPaymentOutputDto(
     val receiptNumber: String,
     val cashierName: String,
     val observation: String,
+    val paymentDetail: PaymentDetailDto? = null, // Detalle del pago incluyendo multas
     val createdAt: OffsetDateTime
 )
 
@@ -140,6 +159,24 @@ data class PaymentReceiptDto(
     val cashierName: String,
     val previousBalance: BigDecimal,
     val newBalance: BigDecimal
+)
+
+// Pending Fines DTOs
+data class PendingFineDto(
+    val id: UUID,
+    val type: String, // "JOB" o "MEETING"
+    val name: String,
+    val date: LocalDate,
+    val fine: BigDecimal
+)
+
+data class MonthlyPendingFinesDto(
+    val partnerId: UUID,
+    val month: Int,
+    val year: Int,
+    val jobAbsences: List<PendingFineDto>,
+    val meetingAbsences: List<PendingFineDto>,
+    val totalFines: BigDecimal
 )
 
 // Report DTOs
@@ -211,4 +248,10 @@ data class PendingReadingsReportDto(
     val daysSinceLastReading: Int?,
     val address: String?,
     val contactPhone: String?
+)
+
+// DTO para detalle completo de factura con pagos
+data class WaterBillDetailDto(
+    val bill: WaterBillOutputDto,
+    val payments: List<WaterPaymentOutputDto>
 )

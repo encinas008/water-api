@@ -3,6 +3,7 @@ package com.dreamsbo.posapi.service
 import com.dreamsbo.posapi.common.errorhandler.BadRequestException
 import com.dreamsbo.posapi.common.errorhandler.NotFoundEntityException
 import com.dreamsbo.posapi.dto.BillConceptItemDto
+import com.dreamsbo.posapi.dto.WaterBillDetailDto
 import com.dreamsbo.posapi.dto.WaterBillGenerationDto
 import com.dreamsbo.posapi.dto.WaterBillOutputDto
 import com.dreamsbo.posapi.dto.WaterBillSummaryDto
@@ -24,6 +25,9 @@ class WaterBillingService(
     private val waterMeterReadingRepository: WaterMeterReadingRepository,
     private val billStatusTypeRepository: BillStatusTypeRepository,
     private val billConceptItemRepository: BillConceptItemRepository,
+    private val waterPaymentRepository: WaterPaymentRepository,
+    private val waterPaymentService: com.dreamsbo.posapi.service.WaterPaymentService,
+    private val waterPaymentDetailRepository: com.dreamsbo.posapi.persistence.repository.WaterPaymentDetailRepository,
 ) {
 
     @Transactional
@@ -113,6 +117,21 @@ class WaterBillingService(
         val bill = waterBillRepository.findById(id)
             .orElseThrow { NotFoundEntityException("No se ha encontrado la factura. BillId = $id") }
         return toWaterBillOutputDto(bill)
+    }
+
+    fun getBillDetailWithPayments(id: UUID): WaterBillDetailDto {
+        val bill = waterBillRepository.findById(id)
+            .orElseThrow { NotFoundEntityException("No se ha encontrado la factura. BillId = $id") }
+        
+        val billDto = toWaterBillOutputDto(bill)
+        
+        // Obtener pagos relacionados a esta factura
+        val payments = waterPaymentService.getPaymentsByBillId(id)
+        
+        return WaterBillDetailDto(
+            bill = billDto,
+            payments = payments
+        )
     }
 
     fun getBillSummaries(): List<WaterBillSummaryDto> {
@@ -375,6 +394,36 @@ class WaterBillingService(
                 )
             }
         
+        // Calcular paidAmount desde water_payment
+        // Sumar solo la parte de factura de cada pago (excluyendo multas)
+        val payments = waterPaymentRepository.findByWaterBillIdAndActive(entity.id, true)
+        var totalPaidAmount = BigDecimal.ZERO
+        var totalFinesPaid = BigDecimal.ZERO
+        
+        payments.forEach { payment ->
+            // Obtener detalles del pago para separar factura de multas
+            val paymentDetails = waterPaymentDetailRepository.findByWaterPaymentIdAndActive(payment.id, true)
+            if (paymentDetails.isNotEmpty()) {
+                // Si hay detalles, significa que hay multas - usar solo billAmount
+                val finesAmount = paymentDetails.sumOf { it.fineAmount }
+                val billAmount = payment.amount.subtract(finesAmount)
+                totalPaidAmount = totalPaidAmount.add(billAmount)
+                totalFinesPaid = totalFinesPaid.add(finesAmount)
+            } else {
+                // Si no hay detalles, todo el monto es de factura
+                totalPaidAmount = totalPaidAmount.add(payment.amount)
+            }
+        }
+        
+        // El totalAmount es el total de la factura (desde entity.totalAmount)
+        // El paidAmount es solo la parte de factura pagada (sin multas)
+        // El remainingBalance no puede ser negativo (mínimo 0)
+        val calculatedRemainingBalance = if (entity.totalAmount.subtract(totalPaidAmount) < BigDecimal.ZERO) {
+            BigDecimal.ZERO
+        } else {
+            entity.totalAmount.subtract(totalPaidAmount)
+        }
+        
         return WaterBillOutputDto(
             id = entity.id,
             billNumber = entity.billNumber,
@@ -388,14 +437,15 @@ class WaterBillingService(
             ratePerM3 = entity.ratePerM3,
             baseAmount = entity.baseAmount,
             totalAmount = entity.totalAmount,
-            paidAmount = entity.paidAmount,
-            remainingBalance = entity.remainingBalance,
+            paidAmount = totalPaidAmount,
+            remainingBalance = calculatedRemainingBalance,
             statusCode = entity.status.code,
             statusName = entity.status.name,
             dueDate = entity.dueDate,
             paidDate = entity.paidDate,
             isOverdue = isOverdue,
             concepts = concepts,
+            totalFinesPaid = totalFinesPaid,
             createdAt = entity.createdAt,
             updatedAt = entity.updatedAt
         )
@@ -403,8 +453,10 @@ class WaterBillingService(
 
     private fun toWaterBillSummaryDto(entity: WaterBillEntity): WaterBillSummaryDto {
         val isOverdue = entity.dueDate.isBefore(LocalDate.now()) && entity.status.code != "PAID"
-        val formatter = DateTimeFormatter.ofPattern("MM/yyyy")
-        val billingPeriod = "${entity.billingPeriodStart.format(formatter)} - ${entity.billingPeriodEnd.format(formatter)}"
+        // Formato: "Enero 2025" (solo mes y año)
+        val monthName = getMonthName(entity.billingPeriodStart.monthValue)
+        val capitalizedMonth = monthName.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
+        val billingPeriod = "$capitalizedMonth ${entity.billingPeriodStart.year}"
 
         return WaterBillSummaryDto(
             id = entity.id,
@@ -417,5 +469,23 @@ class WaterBillingService(
             dueDate = entity.dueDate,
             isOverdue = isOverdue
         )
+    }
+
+    private fun getMonthName(month: Int): String {
+        return when (month) {
+            1 -> "enero"
+            2 -> "febrero"
+            3 -> "marzo"
+            4 -> "abril"
+            5 -> "mayo"
+            6 -> "junio"
+            7 -> "julio"
+            8 -> "agosto"
+            9 -> "septiembre"
+            10 -> "octubre"
+            11 -> "noviembre"
+            12 -> "diciembre"
+            else -> ""
+        }
     }
 }

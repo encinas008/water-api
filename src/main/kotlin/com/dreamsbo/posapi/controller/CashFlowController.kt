@@ -27,4 +27,9 @@ class CashFlowController(
 
         return cashFlowService.create(cashFlowInputDto)
     }
+
+    @GetMapping("/cash-balance/{cashBalanceId}/withdrawals")
+    fun getWithdrawalsByCashBalance(@PathVariable("cashBalanceId") cashBalanceId: UUID): List<CashFlowOutputDto> {
+        return cashFlowService.findWithdrawalsByCashBalanceId(cashBalanceId)
+    }
 }

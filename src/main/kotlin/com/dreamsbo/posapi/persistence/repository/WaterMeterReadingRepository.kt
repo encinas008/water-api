@@ -4,6 +4,7 @@ import com.dreamsbo.posapi.persistence.entity.WaterMeterReadingEntity
 import org.springframework.data.domain.Sort
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
+import org.springframework.data.repository.query.Param
 import org.springframework.stereotype.Repository
 import java.time.LocalDate
 import java.util.*
@@ -21,4 +22,7 @@ interface WaterMeterReadingRepository : JpaRepository<WaterMeterReadingEntity, U
         endDate: LocalDate,
         active: Boolean
     ): List<WaterMeterReadingEntity>
+
+    @Query("SELECT r FROM WaterMeterReadingEntity r WHERE r.partner.id = :partnerId AND YEAR(r.readingDate) = :year AND MONTH(r.readingDate) = :month AND r.active = :active")
+    fun findByPartnerIdAndYearAndMonth(partnerId: UUID, year: Int, month: Int, active: Boolean): List<WaterMeterReadingEntity>
 }

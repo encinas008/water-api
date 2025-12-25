@@ -10,6 +10,7 @@ import com.dreamsbo.posapi.persistence.repository.MeetingAttendanceRepository
 import com.dreamsbo.posapi.persistence.repository.MeetingRepository
 import com.dreamsbo.posapi.persistence.repository.PartnerRepository
 import jakarta.transaction.Transactional
+import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
 import java.time.LocalDate
 import java.time.OffsetDateTime
@@ -116,6 +117,134 @@ class MeetingAttendanceService(
         attendance.active = false
         attendance.updatedAt = OffsetDateTime.now()
         meetingAttendanceRepository.save(attendance)
+    }
+
+    // Métodos para reemplazar funcionalidad de MeetingPartnerService
+    
+    fun getMeetingWithPartnerAssignments(meetingId: UUID): MeetingPartnerAssignmentDto {
+        val meetingEntity = meetingRepository.findById(meetingId)
+        if (meetingEntity.isEmpty) {
+            throw NotFoundEntityException("No se ha encontrado la reunión. MeetingId = $meetingId")
+        }
+
+        val meeting = meetingEntity.get()
+        
+        // Obtener todos los socios activos ordenados por partnerNumber ASC
+        val allPartners = partnerRepository.findAllByActive(true, Sort.by(Sort.Direction.ASC, "partnerNumber"))
+        
+        // Obtener todos los registros de asistencia activos para esta reunión
+        val allAttendances = meetingAttendanceRepository.findByMeetingIdAndActive(meetingId, true)
+        val assignedPartnerIds = allAttendances.map { it.partner.id }.distinct().toSet()
+
+        // Crear un mapa de partnerId -> primer attendanceId para acceso rápido
+        val partnerToAttendanceIdMap = allAttendances
+            .groupBy { it.partner.id }
+            .mapValues { (_, attendances) -> attendances.minByOrNull { it.attendanceDate }?.id }
+
+        // Crear lista de información de asignación
+        val partnerAssignments = allPartners.map { partner ->
+            val isAssigned = assignedPartnerIds.contains(partner.id)
+            val assignmentId = if (isAssigned) {
+                partnerToAttendanceIdMap[partner.id]
+            } else {
+                null
+            }
+            
+            PartnerAssignmentInfoDto(
+                partnerId = partner.id,
+                partnerNumber = partner.partnerNumber,
+                partnerName = partner.fullName,
+                partnerIdentificationNumber = partner.partnerIdentificationNumber,
+                isAssigned = isAssigned,
+                assignmentId = assignmentId
+            )
+        }
+
+        return MeetingPartnerAssignmentDto(
+            meetingId = meeting.id,
+            meetingName = meeting.name,
+            assignedPartners = partnerAssignments
+        )
+    }
+
+    @Transactional
+    fun assignPartnersToMeeting(meetingId: UUID, input: AssignPartnersToMeetingDto): List<MeetingAttendanceOutputDto> {
+        val meetingEntity = meetingRepository.findById(meetingId)
+        if (meetingEntity.isEmpty) {
+            throw NotFoundEntityException("No se ha encontrado la reunión. MeetingId = $meetingId")
+        }
+
+        val meeting = meetingEntity.get()
+        val meetingDate = meeting.meetingDate
+
+        // Obtener todos los registros de asistencia activos para esta reunión
+        val existingAttendances = meetingAttendanceRepository.findByMeetingIdAndActive(meetingId, true)
+        val existingPartnerIds = existingAttendances.map { it.partner.id }.toSet()
+
+        // Desactivar registros de socios que no están en la nueva lista
+        existingAttendances.forEach { attendance ->
+            if (!input.partnerIds.contains(attendance.partner.id)) {
+                attendance.active = false
+                attendance.updatedAt = OffsetDateTime.now()
+                meetingAttendanceRepository.save(attendance)
+            }
+        }
+
+        // Crear o reactivar registros de asistencia para los socios seleccionados
+        val newAttendances = mutableListOf<MeetingAttendanceEntity>()
+        
+        for (partnerId in input.partnerIds) {
+            val partnerEntity = partnerRepository.findById(partnerId)
+            if (partnerEntity.isEmpty) {
+                continue // Saltar si el socio no existe
+            }
+
+            val partner = partnerEntity.get()
+            
+            // Verificar si ya existe un registro de asistencia para este socio en esta fecha
+            val existingAttendance = meetingAttendanceRepository.findByMeetingIdAndPartnerIdAndDate(
+                meetingId,
+                partnerId,
+                meetingDate,
+                true
+            )
+            
+            if (existingAttendance.isPresent) {
+                // Reactivar si estaba inactivo
+                val attendance = existingAttendance.get()
+                if (!attendance.active) {
+                    attendance.active = true
+                    attendance.updatedAt = OffsetDateTime.now()
+                    meetingAttendanceRepository.save(attendance)
+                }
+                newAttendances.add(attendance)
+            } else {
+                // Crear nuevo registro de asistencia (por defecto ausente)
+                val newAttendance = MeetingAttendanceEntity(
+                    meeting = meeting,
+                    partner = partner,
+                    attendanceDate = meetingDate,
+                    present = false // Por defecto ausente, se puede cambiar después
+                )
+                val saved = meetingAttendanceRepository.save(newAttendance)
+                newAttendances.add(saved)
+            }
+        }
+
+        return newAttendances.map { toMeetingAttendanceOutputDto(it) }
+    }
+
+    @Transactional
+    fun removePartnerFromMeeting(meetingId: UUID, partnerId: UUID) {
+        // Desactivar todos los registros de asistencia de este socio para esta reunión
+        val attendances = meetingAttendanceRepository.findByMeetingIdAndActive(meetingId, true)
+            .filter { it.partner.id == partnerId }
+        
+        attendances.forEach { attendance ->
+            attendance.active = false
+            attendance.updatedAt = OffsetDateTime.now()
+            meetingAttendanceRepository.save(attendance)
+        }
     }
 
     private fun toMeetingAttendanceOutputDto(entity: MeetingAttendanceEntity): MeetingAttendanceOutputDto {

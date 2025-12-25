@@ -4,7 +4,7 @@ import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.util.*
 
-data class AttendanceOutputDto(
+data class JobAttendanceOutputDto(
     val id: UUID,
     val jobId: UUID,
     val jobName: String,
@@ -21,7 +21,7 @@ data class AttendanceOutputDto(
     val updatedAt: OffsetDateTime?
 )
 
-data class AttendanceInputDto(
+data class JobAttendanceInputDto(
     val jobId: UUID,
     val partnerId: UUID,
     val attendanceDate: LocalDate,
@@ -30,24 +30,24 @@ data class AttendanceInputDto(
     val checkOutTime: OffsetDateTime? = null
 )
 
-data class AttendanceUpdateDto(
+data class JobAttendanceUpdateDto(
     val present: Boolean? = null,
     val checkInTime: OffsetDateTime? = null,
     val checkOutTime: OffsetDateTime? = null
 )
 
-data class AttendanceByDateDto(
+data class JobAttendanceByDateDto(
     val attendanceDate: LocalDate,
-    val attendances: List<AttendanceOutputDto>
+    val attendances: List<JobAttendanceOutputDto>
 )
 
-data class BulkAttendanceInputDto(
+data class BulkJobAttendanceInputDto(
     val jobId: UUID,
     val attendanceDate: LocalDate,
-    val attendances: List<PartnerAttendanceDto>
+    val attendances: List<PartnerJobAttendanceDto>
 )
 
-data class PartnerAttendanceDto(
+data class PartnerJobAttendanceDto(
     val partnerId: UUID,
     val present: Boolean,
     val checkInTime: OffsetDateTime? = null,

@@ -1,5 +1,6 @@
 package com.dreamsbo.posapi.controller
 
+import com.dreamsbo.posapi.dto.WaterBillDetailDto
 import com.dreamsbo.posapi.dto.WaterBillGenerationDto
 import com.dreamsbo.posapi.dto.WaterBillInputDto
 import com.dreamsbo.posapi.dto.WaterBillOutputDto
@@ -36,6 +37,11 @@ class WaterBillingController(
     @GetMapping("/{id}")
     fun getById(@PathVariable id: UUID): WaterBillOutputDto {
         return waterBillingService.getBillDetails(id)
+    }
+
+    @GetMapping("/{id}/detail")
+    fun getBillDetailWithPayments(@PathVariable id: UUID): WaterBillDetailDto {
+        return waterBillingService.getBillDetailWithPayments(id)
     }
 
     @GetMapping("/partner/{partnerId}")

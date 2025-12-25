@@ -21,4 +21,7 @@ interface CashBalanceRepository : JpaRepository<CashBalanceEntity, UUID> {
 
     @Query("select c from CashBalanceEntity c where c.box.id = :boxId AND c.openTime is not null AND c.closeTime is NULL AND c.active = true")
     fun findOpenBoxForUser(boxId: UUID): Optional<CashBalanceEntity>
+
+    @Query("SELECT c FROM CashBalanceEntity c WHERE c.active = true ORDER BY c.openTime DESC")
+    fun findAllActiveCashBalances(): List<CashBalanceEntity>
 }

@@ -11,11 +11,11 @@ import java.util.*
 @Entity
 @Table(
     schema = "pos",
-    name = "attendance",
+    name = "job_attendance",
     uniqueConstraints = [UniqueConstraint(columnNames = ["job_id", "partner_id", "attendance_date"])]
 )
 @NoArg
-data class AttendanceEntity(
+data class JobAttendanceEntity(
     @Id
     @Column(name = "attendance_id")
     var id: UUID = UUID.randomUUID(),

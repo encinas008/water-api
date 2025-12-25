@@ -7,8 +7,11 @@ import com.dreamsbo.posapi.dto.PaymentReceiptDto
 import com.dreamsbo.posapi.dto.PaymentReceiptFullDto
 import com.dreamsbo.posapi.dto.WaterPaymentInputDto
 import com.dreamsbo.posapi.dto.WaterPaymentOutputDto
-import com.dreamsbo.posapi.persistence.entity.CashFlowEntity
+import com.dreamsbo.posapi.dto.PaymentDetailDto
+import com.dreamsbo.posapi.dto.PaymentFineDetailDto
+import com.dreamsbo.posapi.dto.MonthlyPendingFinesDto
 import com.dreamsbo.posapi.persistence.entity.WaterPaymentEntity
+import com.dreamsbo.posapi.persistence.entity.WaterPaymentDetailEntity
 import com.dreamsbo.posapi.persistence.repository.*
 import jakarta.transaction.Transactional
 import org.springframework.data.domain.Sort
@@ -29,8 +32,8 @@ class WaterPaymentService(
     private val userRepository: UserRepository,
     private val billStatusTypeRepository: BillStatusTypeRepository,
     private val billConceptItemRepository: BillConceptItemRepository,
-    private val cashFlowRepository: CashFlowRepository,
-    private val cashFlowTypeRepository: CashFlowTypeRepository,
+    private val monthlyPendingFinesService: MonthlyPendingFinesService,
+    private val waterPaymentDetailRepository: WaterPaymentDetailRepository,
 ) {
 
     @Transactional
@@ -51,46 +54,108 @@ class WaterPaymentService(
             cashBalanceRepository.findById(it)
         }
 
+        // Calcular monto total y multas pendientes si se solicita
+        var totalPaymentAmount = input.amount
+        var pendingFinesAmount = BigDecimal.ZERO
+        var pendingFines: MonthlyPendingFinesDto? = null
+        var billAmount = input.amount // Monto de la factura (sin multas)
+        
+        if (input.includePendingFines) {
+            val now = LocalDate.now()
+            pendingFines = monthlyPendingFinesService.getMonthlyPendingFines(
+                input.partnerId, 
+                now.monthValue, 
+                now.year
+            )
+            pendingFinesAmount = pendingFines.totalFines
+            
+            // El amount que viene del frontend ya incluye las multas cuando includePendingFines es true
+            // Por lo tanto, el monto de la factura es el total menos las multas
+            billAmount = input.amount.subtract(pendingFinesAmount)
+            totalPaymentAmount = input.amount // El total ya viene en input.amount
+        }
+
         // Validate payment amount
         if (input.amount <= BigDecimal.ZERO) {
             throw BadRequestException("El monto del pago debe ser mayor a cero")
         }
 
-        if (input.amount > bill.remainingBalance) {
-            throw BadRequestException("El monto del pago (${input.amount}) no puede ser mayor al saldo pendiente (${bill.remainingBalance})")
+        // Validar que el monto de factura no exceda el saldo pendiente
+        if (billAmount > bill.remainingBalance) {
+            throw BadRequestException("El monto de la factura (${billAmount}) no puede ser mayor al saldo pendiente (${bill.remainingBalance})")
+        }
+
+        // Validar que el monto total no exceda el máximo permitido
+        val maxAllowedAmount = bill.remainingBalance.add(pendingFinesAmount)
+        if (totalPaymentAmount > maxAllowedAmount) {
+            throw BadRequestException("El monto total del pago (${totalPaymentAmount}) no puede ser mayor al saldo pendiente de la factura (${bill.remainingBalance}) más las multas pendientes (${pendingFinesAmount})")
         }
 
         val receiptNumber = generateReceiptNumber(partner.id)
+
+        // Construir observación incluyendo información de multas si aplica
+        val observationText = if (input.includePendingFines && pendingFinesAmount > BigDecimal.ZERO) {
+            val finesInfo = "Incluye multas del mes: ${pendingFinesAmount}. "
+            if (input.observation.isNotEmpty()) {
+                finesInfo + input.observation
+            } else {
+                finesInfo
+            }
+        } else {
+            input.observation
+        }
 
         val payment = WaterPaymentEntity(
             waterBill = bill,
             partner = partner,
             paymentDate = input.paymentDate,
-            amount = input.amount,
+            amount = totalPaymentAmount, // Usar el monto total que incluye multas
             paymentType = paymentType,
             cashBalance = cashBalanceOptional?.orElse(null),
             user = user,
             receiptNumber = receiptNumber,
-            observation = input.observation
+            observation = observationText
         )
 
         val savedPayment = waterPaymentRepository.save(payment)
 
-        // Update bill amounts and status
-        applyPaymentToBill(bill, input.amount)
+        // Update bill amounts and status (usar el monto de la factura, no el total con multas)
+        applyPaymentToBill(bill, billAmount)
 
         // Update partner debt
-        partner.currentDebt = partner.currentDebt.subtract(input.amount)
+        partner.currentDebt = partner.currentDebt.subtract(totalPaymentAmount)
         partnerRepository.save(partner)
 
-        // Crear CashFlow automáticamente si hay cashBalanceId
-        if (cashBalanceOptional != null && cashBalanceOptional.isPresent) {
-            try {
-                createCashFlowFromPayment(savedPayment, cashBalanceOptional.get())
-            } catch (e: Exception) {
-                // Log el error pero no fallar el pago si el cashFlow no se puede crear
-                println("⚠️ Error al crear CashFlow para el pago ${savedPayment.id}: ${e.message}")
-                e.printStackTrace()
+        // NOTA: No creamos CashFlow automáticamente desde los pagos de agua
+        // porque los pagos ya se cuentan en el cálculo del total en caja (cashFromSales.cash)
+        // Si se creara un CashFlow aquí, se estaría duplicando el monto en el cálculo
+
+        // Guardar detalle de pago si incluye multas
+        if (input.includePendingFines && pendingFines != null && pendingFinesAmount > BigDecimal.ZERO) {
+            // Guardar multas de trabajos
+            pendingFines.jobAbsences.forEach { absence ->
+                val detail = WaterPaymentDetailEntity(
+                    waterPayment = savedPayment,
+                    fineType = "JOB",
+                    fineId = absence.id,
+                    fineName = absence.name,
+                    fineDate = absence.date,
+                    fineAmount = absence.fine
+                )
+                waterPaymentDetailRepository.save(detail)
+            }
+            
+            // Guardar multas de reuniones
+            pendingFines.meetingAbsences.forEach { absence ->
+                val detail = WaterPaymentDetailEntity(
+                    waterPayment = savedPayment,
+                    fineType = "MEETING",
+                    fineId = absence.id,
+                    fineName = absence.name,
+                    fineDate = absence.date,
+                    fineAmount = absence.fine
+                )
+                waterPaymentDetailRepository.save(detail)
             }
         }
 
@@ -119,8 +184,10 @@ class WaterPaymentService(
         val bill = payment.waterBill
         val partner = payment.partner
 
-        val formatter = DateTimeFormatter.ofPattern("MM/yyyy")
-        val billingPeriod = "${bill.billingPeriodStart.format(formatter)} - ${bill.billingPeriodEnd.format(formatter)}"
+        // Formato: "Enero 2025" (solo mes y año)
+        val monthName = getMonthName(bill.billingPeriodStart.monthValue)
+        val capitalizedMonth = monthName.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
+        val billingPeriod = "$capitalizedMonth ${bill.billingPeriodStart.year}"
 
         val previousBalance = bill.remainingBalance.add(payment.amount)
         val newBalance = bill.remainingBalance
@@ -348,37 +415,62 @@ class WaterPaymentService(
      * Crea un CashFlow automáticamente cuando se registra un pago de agua.
      * El CashFlow se crea como INGRESO ya que es dinero que entra a la caja.
      */
-    private fun createCashFlowFromPayment(
-        payment: WaterPaymentEntity,
-        cashBalance: com.dreamsbo.posapi.persistence.entity.CashBalanceEntity
-    ) {
-        // Buscar el tipo de flujo "INGRESO"
-        val ingresoTipo = cashFlowTypeRepository.findByNameAndActive("INGRESO", true)
-            .orElseGet {
-                // Si no se encuentra por nombre, buscar por código "IN"
-                cashFlowTypeRepository.findByCodeAndActive("IN", true)
-                    .orElseThrow {
-                        NotFoundEntityException("No se ha encontrado el tipo de flujo INGRESO. Asegúrese de que exista en la base de datos.")
-                    }
-            }
-
-        // Crear descripción del cash flow
-        val description = "Pago de factura de agua - ${payment.waterBill.billNumber} - Socio: ${payment.partner.fullName}"
-
-        // Crear y guardar el CashFlow
-        val cashFlow = CashFlowEntity(
-            amount = payment.amount,
-            description = description,
-            cashBalance = cashBalance,
-            cashFlowType = ingresoTipo,
-            paymentType = payment.paymentType
-        )
-
-        cashFlowRepository.save(cashFlow)
-        println("✅ CashFlow creado automáticamente para el pago ${payment.id} - Monto: ${payment.amount}")
+    fun getPaymentsByBillId(billId: UUID): List<WaterPaymentOutputDto> {
+        val payments = waterPaymentRepository.findByWaterBillIdAndActive(billId, true)
+            .sortedByDescending { it.paymentDate }
+        return payments.map { toWaterPaymentOutputDto(it) }
     }
 
     private fun toWaterPaymentOutputDto(entity: WaterPaymentEntity): WaterPaymentOutputDto {
+        // Obtener detalle de pago desde la base de datos
+        val paymentDetails = waterPaymentDetailRepository.findByWaterPaymentIdAndActive(entity.id, true)
+        
+        val paymentDetail = if (paymentDetails.isNotEmpty()) {
+            val jobFines = paymentDetails
+                .filter { it.fineType == "JOB" }
+                .map {
+                    PaymentFineDetailDto(
+                        id = it.fineId,
+                        type = it.fineType,
+                        name = it.fineName,
+                        date = it.fineDate,
+                        fineAmount = it.fineAmount
+                    )
+                }
+            
+            val meetingFines = paymentDetails
+                .filter { it.fineType == "MEETING" }
+                .map {
+                    PaymentFineDetailDto(
+                        id = it.fineId,
+                        type = it.fineType,
+                        name = it.fineName,
+                        date = it.fineDate,
+                        fineAmount = it.fineAmount
+                    )
+                }
+            
+            val finesAmount = paymentDetails.sumOf { it.fineAmount }
+            val billAmount = entity.amount.subtract(finesAmount)
+            
+            PaymentDetailDto(
+                billAmount = billAmount,
+                finesAmount = finesAmount,
+                totalAmount = entity.amount,
+                jobFines = jobFines,
+                meetingFines = meetingFines
+            )
+        } else {
+            // Si no hay detalles, asumir que todo es monto de factura
+            PaymentDetailDto(
+                billAmount = entity.amount,
+                finesAmount = BigDecimal.ZERO,
+                totalAmount = entity.amount,
+                jobFines = emptyList(),
+                meetingFines = emptyList()
+            )
+        }
+        
         return WaterPaymentOutputDto(
             id = entity.id,
             waterBillId = entity.waterBill.id,
@@ -391,6 +483,7 @@ class WaterPaymentService(
             receiptNumber = entity.receiptNumber,
             cashierName = "${entity.user.profile.name} ${entity.user.profile.lastname}",
             observation = entity.observation,
+            paymentDetail = paymentDetail,
             createdAt = entity.createdAt
         )
     }

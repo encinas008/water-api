@@ -53,4 +53,9 @@ class CashBalanceController(
 
         return cashBalanceService.getDetails(cashBalanceId)
     }
+
+    @GetMapping
+    fun getAllCashBalances(): List<CashBalanceOutputDto> {
+        return cashBalanceService.findAllActiveCashBalances()
+    }
 }

@@ -262,4 +262,26 @@ class CashBalanceService(
 
         return cashBalances
     }
+
+    fun findAllActiveCashBalances(): List<CashBalanceOutputDto> {
+        val cashBalances = mutableListOf<CashBalanceOutputDto>()
+
+        cashBalanceRepository.findAllActiveCashBalances().forEach {
+            cashBalances.add(
+                CashBalanceOutputDto(
+                    id = it.id,
+                    description = it.description,
+                    assignee = "${it.box.user.profile.name} ${it.box.user.profile.lastname}",
+                    openTime = it.openTime,
+                    closeTime = it.closeTime,
+                    initialMoney = it.initialMoney,
+                    createdAt = it.createdAt,
+                    updatedAt = it.updatedAt,
+                    active = it.active,
+                )
+            )
+        }
+
+        return cashBalances
+    }
 }

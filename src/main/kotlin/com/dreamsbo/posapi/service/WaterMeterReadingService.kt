@@ -29,6 +29,18 @@ class WaterMeterReadingService(
         val partner = partnerRepository.findById(input.partnerId)
             .orElseThrow { NotFoundEntityException("No se ha encontrado el socio. PartnerId = ${input.partnerId}") }
 
+        // Validar que no exista ya una lectura para este socio en el mismo mes
+        val existingReadings = waterMeterReadingRepository.findByPartnerIdAndYearAndMonth(
+            input.partnerId,
+            input.readingDate.year,
+            input.readingDate.monthValue,
+            true
+        )
+        if (existingReadings.isNotEmpty()) {
+            val monthName = getMonthName(input.readingDate.monthValue)
+            throw BadRequestException("Ya existe una lectura registrada para este socio en el mes de $monthName ${input.readingDate.year}. Solo se permite una lectura por mes.")
+        }
+
         // Get previous reading
         val previousReadingEntity = waterMeterReadingRepository.findLatestByPartnerId(input.partnerId, true)
         val previousReading = previousReadingEntity.map { it.currentReading }.orElse(BigDecimal.ZERO)
@@ -133,6 +145,24 @@ class WaterMeterReadingService(
             .orElse(BigDecimal.ZERO)
 
         return currentReading >= previousReading
+    }
+
+    private fun getMonthName(month: Int): String {
+        return when (month) {
+            1 -> "enero"
+            2 -> "febrero"
+            3 -> "marzo"
+            4 -> "abril"
+            5 -> "mayo"
+            6 -> "junio"
+            7 -> "julio"
+            8 -> "agosto"
+            9 -> "septiembre"
+            10 -> "octubre"
+            11 -> "noviembre"
+            12 -> "diciembre"
+            else -> ""
+        }
     }
 
     private fun toWaterMeterReadingOutputDto(entity: WaterMeterReadingEntity): WaterMeterReadingOutputDto {

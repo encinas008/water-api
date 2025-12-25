@@ -18,7 +18,8 @@ class CashFlowService(
     private val cashFlowTypeRepository: CashFlowTypeRepository,
     private val cashBalanceRepository: CashBalanceRepository,
     private val saleRepository: SaleRepository,
-    private val boxRepository: BoxRepository
+    private val boxRepository: BoxRepository,
+    private val waterPaymentRepository: WaterPaymentRepository
 ) {
 
     fun findAllByUserId(
@@ -51,6 +52,28 @@ class CashFlowService(
         }
 
         return cashFlows
+    }
+
+    fun findWithdrawalsByCashBalanceId(cashBalanceId: UUID): List<CashFlowOutputDto> {
+        val cashFlows = cashFlowRepository.findByCashBalanceId(cashBalanceId)
+        
+        return cashFlows
+            .filter { it.cashFlowType.name == "EGRESO" && it.active }
+            .sortedByDescending { it.createdAt }
+            .map {
+                CashFlowOutputDto(
+                    id = it.id,
+                    box = it.cashBalance.box.name,
+                    boxId = it.cashBalance.box.id,
+                    assignee = "${it.cashBalance.box.user.profile.name} ${it.cashBalance.box.user.profile.lastname}",
+                    type = it.cashFlowType.name,
+                    description = it.description,
+                    amount = it.amount,
+                    active = it.active,
+                    createdAt = it.createdAt,
+                    updatedAt = it.updatedAt
+                )
+            }
     }
 
     fun create(cashFlowInputDto: CashFlowInputDto): CashFlowOutputDto {
@@ -120,27 +143,35 @@ class CashFlowService(
 
     private fun getCurrentCashInBox(cashBalanceId: UUID): BigDecimal {
 
+        // Obtener efectivo de ventas
         val sales = saleRepository.findByCashBalanceIdAndPaymentTypeName(cashBalanceId, "EFECTIVO")
-
         val salesByType = sales.groupBy { it.paymentType.name }
-
         var cashFromSales = BigDecimal(0)
         salesByType["EFECTIVO"]?.forEach {
             cashFromSales = cashFromSales.plus(it.subTotal)
         }
 
-        return cashFromSales
+        // Obtener efectivo de pagos de agua
+        val waterPayments = waterPaymentRepository.findByCashBalanceId(cashBalanceId, true)
+        val paymentsByType = waterPayments.groupBy { it.paymentType.name }
+        var cashFromWaterPayments = BigDecimal(0)
+        paymentsByType["EFECTIVO"]?.forEach {
+            cashFromWaterPayments = cashFromWaterPayments.plus(it.amount)
+        }
+
+        return cashFromSales.plus(cashFromWaterPayments)
     }
 
     private fun getCurrentCashInCashFlows(cashBalanceId: UUID): BigDecimal {
 
-        val cashFlows = cashFlowRepository.findByCashBalanceIdAndPaymentTypeName(cashBalanceId, "EFECTIVO")
+        val cashFlows = cashFlowRepository.findByCashBalanceId(cashBalanceId)
 
-        val cashFlowsByType = cashFlows.groupBy { it.paymentType.name }
-
+        // Filtrar solo INGRESOS en efectivo (no EGRESOS)
         var cashFromCashFlows = BigDecimal(0)
-        cashFlowsByType["EFECTIVO"]?.forEach {
-            cashFromCashFlows = cashFromCashFlows.plus(it.amount)
+        cashFlows.forEach {
+            if (it.cashFlowType.name == "INGRESO" && it.paymentType.name == "EFECTIVO") {
+                cashFromCashFlows = cashFromCashFlows.plus(it.amount)
+            }
         }
 
         return cashFromCashFlows

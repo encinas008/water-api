@@ -60,6 +60,7 @@ class JobService(
         input.name?.let { job.name = it }
         input.startDate?.let { job.startDate = it }
         input.description?.let { job.description = it }
+        input.fine?.let { job.fine = it }
 
         job.updatedAt = OffsetDateTime.now()
 

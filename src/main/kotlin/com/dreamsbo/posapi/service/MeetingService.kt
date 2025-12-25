@@ -5,10 +5,10 @@ import com.dreamsbo.posapi.dto.MeetingInputDto
 import com.dreamsbo.posapi.dto.MeetingOutputDto
 import com.dreamsbo.posapi.dto.MeetingUpdateDto
 import com.dreamsbo.posapi.persistence.entity.MeetingEntity
-import com.dreamsbo.posapi.persistence.entity.MeetingPartnerEntity
+import com.dreamsbo.posapi.persistence.entity.MeetingAttendanceEntity
 import com.dreamsbo.posapi.persistence.repository.MeetingRepository
 import com.dreamsbo.posapi.persistence.repository.MeetingTypeRepository
-import com.dreamsbo.posapi.persistence.repository.MeetingPartnerRepository
+import com.dreamsbo.posapi.persistence.repository.MeetingAttendanceRepository
 import com.dreamsbo.posapi.persistence.repository.PartnerRepository
 import jakarta.transaction.Transactional
 import org.springframework.data.domain.Sort
@@ -21,7 +21,7 @@ class MeetingService(
     private val meetingRepository: MeetingRepository,
     private val meetingTypeRepository: MeetingTypeRepository,
     private val partnerRepository: PartnerRepository,
-    private val meetingPartnerRepository: MeetingPartnerRepository
+    private val meetingAttendanceRepository: MeetingAttendanceRepository
 ) {
 
     fun findAll(): List<MeetingOutputDto> {
@@ -150,13 +150,25 @@ class MeetingService(
         // Obtener todos los socios activos
         val allPartners = partnerRepository.findAllByActive(true, Sort.by(Sort.Direction.ASC, "partnerNumber"))
         
-        // Crear asignaciones para todos los socios
+        // Crear registros de asistencia para todos los socios (por defecto ausentes)
         allPartners.forEach { partner ->
-            val meetingPartner = MeetingPartnerEntity(
-                meeting = meeting,
-                partner = partner
+            // Verificar si ya existe un registro de asistencia
+            val existingAttendance = meetingAttendanceRepository.findByMeetingIdAndPartnerIdAndDate(
+                meeting.id,
+                partner.id,
+                meeting.meetingDate,
+                true
             )
-            meetingPartnerRepository.save(meetingPartner)
+            
+            if (existingAttendance.isEmpty) {
+                val attendance = MeetingAttendanceEntity(
+                    meeting = meeting,
+                    partner = partner,
+                    attendanceDate = meeting.meetingDate,
+                    present = false // Por defecto ausente, se puede cambiar después
+                )
+                meetingAttendanceRepository.save(attendance)
+            }
         }
     }
 
