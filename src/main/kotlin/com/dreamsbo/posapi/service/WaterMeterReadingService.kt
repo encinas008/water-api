@@ -170,7 +170,6 @@ class WaterMeterReadingService(
             id = entity.id,
             partnerId = entity.partner.id,
             partnerName = entity.partner.fullName,
-            waterConnectionNumber = entity.partner.waterConnectionNumber,
             readingDate = entity.readingDate,
             previousReading = entity.previousReading,
             currentReading = entity.currentReading,

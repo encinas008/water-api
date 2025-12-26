@@ -19,7 +19,6 @@ data class WaterMeterReadingOutputDto(
     val id: UUID,
     val partnerId: UUID,
     val partnerName: String,
-    val waterConnectionNumber: String?,
     val readingDate: LocalDate,
     val previousReading: BigDecimal,
     val currentReading: BigDecimal,

@@ -43,32 +43,30 @@ class PartnerService(
 
     @Transactional
     fun createPartner(input: PartnerInputDto): PartnerOutputDto {
-        // Validar número de medidor (obligatorio, mínimo 6 dígitos, único)
-        if (input.waterMeterNumber == null || input.waterMeterNumber.isBlank()) {
-            throw BadRequestException("El número de medidor es obligatorio")
-        }
-        
-        val trimmedMeterNumber = input.waterMeterNumber.trim()
-        if (trimmedMeterNumber.length < 6) {
-            throw BadRequestException("El número de medidor debe tener al menos 6 dígitos")
-        }
-        
-        if (trimmedMeterNumber.length > 50) {
-            throw BadRequestException("El número de medidor no puede exceder 50 caracteres")
-        }
-        
-        // Validar que solo contenga números
-        if (!trimmedMeterNumber.matches(Regex("^[0-9]+$"))) {
-            throw BadRequestException("El número de medidor solo puede contener números")
-        }
-        
-        // Validar que el número de medidor sea único
-        val existingPartner = partnerRepository.findByWaterMeterNumberAndActive(
-            trimmedMeterNumber,
-            true
-        )
-        if (existingPartner.isPresent) {
-            throw BadRequestException("El número de medidor $trimmedMeterNumber ya está registrado para otro socio")
+        // Validar número de medidor (opcional, letras y números, máximo 50 caracteres, único)
+        var waterMeterNumber: String? = null
+        if (input.waterMeterNumber != null && input.waterMeterNumber.isNotBlank()) {
+            val trimmedMeterNumber = input.waterMeterNumber.trim().uppercase()
+            
+            if (trimmedMeterNumber.length > 50) {
+                throw BadRequestException("El número de medidor no puede exceder 50 caracteres")
+            }
+            
+            // Validar que solo contenga letras y números
+            if (!trimmedMeterNumber.matches(Regex("^[A-Z0-9]+$"))) {
+                throw BadRequestException("El número de medidor solo puede contener letras y números")
+            }
+            
+            // Validar que el número de medidor sea único (comparar en mayúsculas)
+            val existingPartner = partnerRepository.findByWaterMeterNumberAndActive(
+                trimmedMeterNumber,
+                true
+            )
+            if (existingPartner.isPresent) {
+                throw BadRequestException("El número de medidor $trimmedMeterNumber ya está registrado para otro socio")
+            }
+            
+            waterMeterNumber = trimmedMeterNumber
         }
 
         var connectionStatus = input.connectionStatusCode?.let {
@@ -82,7 +80,7 @@ class PartnerService(
             cellphone = input.cellphone,
             address = input.address,
             observation = input.observation,
-            waterMeterNumber = input.waterMeterNumber,
+            waterMeterNumber = waterMeterNumber,
             connectionStatus = connectionStatus,
             connectionDate = input.connectionDate,
             waterConnectionAddress = input.waterConnectionAddress,
@@ -114,24 +112,20 @@ class PartnerService(
         input.observation?.let { partner.observation = it }
         input.waterConnectionNumber?.let { partner.waterConnectionNumber = it }
         input.waterMeterNumber?.let { meterNumber ->
-            val trimmedMeterNumber = meterNumber.trim()
+            val trimmedMeterNumber = meterNumber.trim().uppercase()
             
-            // Validar que el número de medidor tenga al menos 6 dígitos
+            // Validar número de medidor (opcional, letras y números, máximo 50 caracteres)
             if (trimmedMeterNumber.isNotBlank()) {
-                if (trimmedMeterNumber.length < 6) {
-                    throw BadRequestException("El número de medidor debe tener al menos 6 dígitos")
-                }
-                
                 if (trimmedMeterNumber.length > 50) {
                     throw BadRequestException("El número de medidor no puede exceder 50 caracteres")
                 }
                 
-                // Validar que solo contenga números
-                if (!trimmedMeterNumber.matches(Regex("^[0-9]+$"))) {
-                    throw BadRequestException("El número de medidor solo puede contener números")
+                // Validar que solo contenga letras y números
+                if (!trimmedMeterNumber.matches(Regex("^[A-Z0-9]+$"))) {
+                    throw BadRequestException("El número de medidor solo puede contener letras y números")
                 }
                 
-                // Validar que el número de medidor sea único (excepto para el socio actual)
+                // Validar que el número de medidor sea único (excepto para el socio actual, comparar en mayúsculas)
                 val existingPartner = partnerRepository.findByWaterMeterNumberAndActive(
                     trimmedMeterNumber,
                     true
@@ -139,8 +133,11 @@ class PartnerService(
                 if (existingPartner.isPresent && existingPartner.get().id != partner.id) {
                     throw BadRequestException("El número de medidor $trimmedMeterNumber ya está registrado para otro socio")
                 }
+                partner.waterMeterNumber = trimmedMeterNumber
+            } else {
+                // Si se envía vacío, limpiar el campo
+                partner.waterMeterNumber = null
             }
-            partner.waterMeterNumber = trimmedMeterNumber
         }
         input.connectionDate?.let { partner.connectionDate = it }
         input.waterConnectionAddress?.let { partner.waterConnectionAddress = it }
@@ -236,8 +233,10 @@ class PartnerService(
         if (waterMeterNumber.isBlank()) {
             return false
         }
+        // Convertir a mayúsculas para comparación
+        val upperMeterNumber = waterMeterNumber.trim().uppercase()
         val existingPartner = partnerRepository.findByWaterMeterNumberAndActive(
-            waterMeterNumber.trim(),
+            upperMeterNumber,
             true
         )
         return existingPartner.isPresent && (excludePartnerId == null || existingPartner.get().id != excludePartnerId)
