@@ -1,0 +1,2 @@
+ALTER TABLE pos.partner
+    ADD COLUMN IF NOT EXISTS is_elderly BOOLEAN DEFAULT false;

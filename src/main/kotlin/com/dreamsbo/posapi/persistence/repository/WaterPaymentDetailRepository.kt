@@ -13,3 +13,4 @@ interface WaterPaymentDetailRepository : JpaRepository<WaterPaymentDetailEntity,
     fun findByWaterPaymentId(paymentId: UUID): List<WaterPaymentDetailEntity>
 }
 
+

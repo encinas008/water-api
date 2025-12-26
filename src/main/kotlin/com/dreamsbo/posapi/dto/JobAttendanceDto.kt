@@ -11,7 +11,7 @@ data class JobAttendanceOutputDto(
     val partnerId: UUID,
     val partnerName: String,
     val partnerNumber: Long?,
-    val partnerIdentificationNumber: String,
+    val partnerIdentificationNumber: String?,
     val attendanceDate: LocalDate,
     val present: Boolean,
     val checkInTime: OffsetDateTime?,

@@ -10,4 +10,6 @@ import java.util.*
 interface PartnerRepository : JpaRepository<PartnerEntity, UUID> {
 
     fun findAllByActive(active: Boolean, sort: Sort): MutableList<PartnerEntity>
+    
+    fun findByWaterMeterNumberAndActive(waterMeterNumber: String, active: Boolean): Optional<PartnerEntity>
 }

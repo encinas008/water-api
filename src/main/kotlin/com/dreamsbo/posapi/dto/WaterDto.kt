@@ -150,7 +150,7 @@ data class PaymentReceiptDto(
     val receiptNumber: String,
     val paymentDate: LocalDate,
     val partnerName: String,
-    val partnerIdentificationNumber: String,
+    val partnerIdentificationNumber: String?,
     val waterConnectionNumber: String?,
     val billNumber: String,
     val billingPeriod: String,
@@ -183,7 +183,7 @@ data class MonthlyPendingFinesDto(
 data class DebtReportDto(
     val partnerId: UUID,
     val partnerName: String,
-    val partnerIdentificationNumber: String,
+    val partnerIdentificationNumber: String?,
     val waterConnectionNumber: String?,
     val totalDebt: BigDecimal,
     val pendingBillsCount: Int,
@@ -224,7 +224,7 @@ data class PaymentReceiptFullDto(
     val receiptType: String,  // "NOTA DE PAGO" o "COPIA ARCHIVO"
     val partnerNumber: String,  // Número del socio (ej: "31")
     val partnerName: String,
-    val partnerIdentificationNumber: String,  // RECLAMOS
+    val partnerIdentificationNumber: String?,  // RECLAMOS
     val paymentDate: String,  // Fecha y hora de pago formateada
     val currentReading: BigDecimal,  // LECTURA ACT.
     val previousReading: BigDecimal,  // LECTURA ANT.

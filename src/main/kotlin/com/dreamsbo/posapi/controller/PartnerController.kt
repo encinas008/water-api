@@ -56,4 +56,13 @@ class PartnerController(
     fun search(@RequestParam q: String): List<PartnerOutputDto> {
         return partnerService.searchPartners(q)
     }
+
+    @GetMapping("/check-meter-number")
+    fun checkMeterNumber(
+        @RequestParam meterNumber: String,
+        @RequestParam(required = false) excludePartnerId: UUID?
+    ): Map<String, Boolean> {
+        val exists = partnerService.checkWaterMeterNumberExists(meterNumber, excludePartnerId)
+        return mapOf("exists" to exists)
+    }
 }

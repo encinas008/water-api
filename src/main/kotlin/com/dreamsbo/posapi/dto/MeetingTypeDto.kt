@@ -9,3 +9,4 @@ data class MeetingTypeOutputDto(
     val active: Boolean
 )
 
+

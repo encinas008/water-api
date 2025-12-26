@@ -9,7 +9,7 @@ data class PartnerOutputDto(
     val id: UUID,
     val partnerNumber: Long?,
     val fullName: String,
-    val partnerIdentificationNumber: String,
+    val partnerIdentificationNumber: String?,
     val cel: String?,
     val address: String?,
     val waterConnectionNumber: String?,
@@ -20,6 +20,7 @@ data class PartnerOutputDto(
     val waterConnectionAddress: String?,
     val currentDebt: BigDecimal,
     val lastBillingDate: LocalDate?,
+    val isElderly: Boolean,
     val notes: String?,
     val active: Boolean,
     val createdAt: OffsetDateTime,
@@ -28,15 +29,15 @@ data class PartnerOutputDto(
 
 data class PartnerInputDto(
     val fullName: String,
-    val partnerIdentificationNumber: String,
+    val partnerIdentificationNumber: String? = null,
     val cellphone: String = "",
     val address: String = "",
     val observation: String = "",
-    val waterConnectionNumber: String? = null,
     val waterMeterNumber: String? = null,
     val connectionStatusCode: String? = null,
     val connectionDate: LocalDate? = null,
     val waterConnectionAddress: String? = null,
+    val isElderly: Boolean = false,
     val notes: String = ""
 )
 
@@ -51,6 +52,7 @@ data class PartnerUpdateDto(
     val connectionStatusCode: String?,
     val connectionDate: LocalDate?,
     val waterConnectionAddress: String?,
+    val isElderly: Boolean?,
     val notes: String?
 )
 

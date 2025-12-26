@@ -9,7 +9,7 @@ data class JobPartnerOutputDto(
     val jobName: String,
     val partnerId: UUID,
     val partnerName: String,
-    val partnerIdentificationNumber: String,
+    val partnerIdentificationNumber: String?,
     val active: Boolean,
     val createdAt: OffsetDateTime
 )
@@ -28,7 +28,7 @@ data class PartnerAssignmentInfoDto(
     val partnerId: UUID,
     val partnerNumber: Long?,
     val partnerName: String,
-    val partnerIdentificationNumber: String,
+    val partnerIdentificationNumber: String?,
     val isAssigned: Boolean,
     val assignmentId: UUID?
 )

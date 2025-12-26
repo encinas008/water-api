@@ -24,7 +24,7 @@ data class PartnerEntity(
     var fullName: String,
 
     @Column(name = "partner_identification_number")
-    var partnerIdentificationNumber: String,
+    var partnerIdentificationNumber: String? = null,
 
     var cellphone: String = "",
     var observation: String = "",
@@ -53,6 +53,9 @@ data class PartnerEntity(
 
     @Column(name = "last_billing_date")
     var lastBillingDate: LocalDate? = null,
+
+    @Column(name = "is_elderly")
+    var isElderly: Boolean = false,
 
     var notes: String = "",
 

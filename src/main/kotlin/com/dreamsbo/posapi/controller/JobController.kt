@@ -39,3 +39,4 @@ class JobController(
         jobService.deleteJob(id)
     }
 }
+

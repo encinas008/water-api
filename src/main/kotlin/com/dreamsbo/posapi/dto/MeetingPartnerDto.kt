@@ -10,7 +10,7 @@ data class MeetingPartnerOutputDto(
     val partnerId: UUID,
     val partnerName: String,
     val partnerNumber: Long?,
-    val partnerIdentificationNumber: String,
+    val partnerIdentificationNumber: String?,
     val active: Boolean,
     val createdAt: OffsetDateTime
 )

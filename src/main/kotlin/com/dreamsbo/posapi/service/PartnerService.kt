@@ -1,5 +1,6 @@
 package com.dreamsbo.posapi.service
 
+import com.dreamsbo.posapi.common.errorhandler.BadRequestException
 import com.dreamsbo.posapi.common.errorhandler.NotFoundEntityException
 import com.dreamsbo.posapi.dto.*
 import com.dreamsbo.posapi.persistence.entity.PartnerEntity
@@ -42,22 +43,50 @@ class PartnerService(
 
     @Transactional
     fun createPartner(input: PartnerInputDto): PartnerOutputDto {
+        // Validar número de medidor (obligatorio, mínimo 6 dígitos, único)
+        if (input.waterMeterNumber == null || input.waterMeterNumber.isBlank()) {
+            throw BadRequestException("El número de medidor es obligatorio")
+        }
+        
+        val trimmedMeterNumber = input.waterMeterNumber.trim()
+        if (trimmedMeterNumber.length < 6) {
+            throw BadRequestException("El número de medidor debe tener al menos 6 dígitos")
+        }
+        
+        if (trimmedMeterNumber.length > 50) {
+            throw BadRequestException("El número de medidor no puede exceder 50 caracteres")
+        }
+        
+        // Validar que solo contenga números
+        if (!trimmedMeterNumber.matches(Regex("^[0-9]+$"))) {
+            throw BadRequestException("El número de medidor solo puede contener números")
+        }
+        
+        // Validar que el número de medidor sea único
+        val existingPartner = partnerRepository.findByWaterMeterNumberAndActive(
+            trimmedMeterNumber,
+            true
+        )
+        if (existingPartner.isPresent) {
+            throw BadRequestException("El número de medidor $trimmedMeterNumber ya está registrado para otro socio")
+        }
+
         var connectionStatus = input.connectionStatusCode?.let {
             connectionStatusTypeRepository.findByCodeAndActive(it, true)
                 .orElseThrow { NotFoundEntityException("Estado de conexión no encontrado: $it") }
         }
 
         val partner = PartnerEntity(
-            fullName = input.fullName,
+            fullName = input.fullName.uppercase().trim(),
             partnerIdentificationNumber = input.partnerIdentificationNumber,
             cellphone = input.cellphone,
             address = input.address,
             observation = input.observation,
-            waterConnectionNumber = input.waterConnectionNumber,
             waterMeterNumber = input.waterMeterNumber,
             connectionStatus = connectionStatus,
             connectionDate = input.connectionDate,
             waterConnectionAddress = input.waterConnectionAddress,
+            isElderly = input.isElderly,
             notes = input.notes
         )
 
@@ -78,15 +107,44 @@ class PartnerService(
 
         val partner = partnerEntity.get()
 
-        input.fullName?.let { partner.fullName = it }
+        input.fullName?.let { partner.fullName = it.uppercase().trim() }
         input.partnerIdentificationNumber?.let { partner.partnerIdentificationNumber = it }
         input.cellphone?.let { partner.cellphone = it }
         input.address?.let { partner.address = it }
         input.observation?.let { partner.observation = it }
         input.waterConnectionNumber?.let { partner.waterConnectionNumber = it }
-        input.waterMeterNumber?.let { partner.waterMeterNumber = it }
+        input.waterMeterNumber?.let { meterNumber ->
+            val trimmedMeterNumber = meterNumber.trim()
+            
+            // Validar que el número de medidor tenga al menos 6 dígitos
+            if (trimmedMeterNumber.isNotBlank()) {
+                if (trimmedMeterNumber.length < 6) {
+                    throw BadRequestException("El número de medidor debe tener al menos 6 dígitos")
+                }
+                
+                if (trimmedMeterNumber.length > 50) {
+                    throw BadRequestException("El número de medidor no puede exceder 50 caracteres")
+                }
+                
+                // Validar que solo contenga números
+                if (!trimmedMeterNumber.matches(Regex("^[0-9]+$"))) {
+                    throw BadRequestException("El número de medidor solo puede contener números")
+                }
+                
+                // Validar que el número de medidor sea único (excepto para el socio actual)
+                val existingPartner = partnerRepository.findByWaterMeterNumberAndActive(
+                    trimmedMeterNumber,
+                    true
+                )
+                if (existingPartner.isPresent && existingPartner.get().id != partner.id) {
+                    throw BadRequestException("El número de medidor $trimmedMeterNumber ya está registrado para otro socio")
+                }
+            }
+            partner.waterMeterNumber = trimmedMeterNumber
+        }
         input.connectionDate?.let { partner.connectionDate = it }
         input.waterConnectionAddress?.let { partner.waterConnectionAddress = it }
+        input.isElderly?.let { partner.isElderly = it }
         input.notes?.let { partner.notes = it }
 
         input.connectionStatusCode?.let { code ->
@@ -167,11 +225,22 @@ class PartnerService(
 
         val filteredPartners = allPartners.filter {
             it.fullName.contains(query, ignoreCase = true) ||
-                    it.partnerIdentificationNumber.contains(query, ignoreCase = true) ||
+                    it.partnerIdentificationNumber?.contains(query, ignoreCase = true) == true ||
                     it.waterConnectionNumber?.contains(query, ignoreCase = true) == true
         }
 
         return filteredPartners.map { toPartnerOutputDto(it) }
+    }
+
+    fun checkWaterMeterNumberExists(waterMeterNumber: String, excludePartnerId: UUID? = null): Boolean {
+        if (waterMeterNumber.isBlank()) {
+            return false
+        }
+        val existingPartner = partnerRepository.findByWaterMeterNumberAndActive(
+            waterMeterNumber.trim(),
+            true
+        )
+        return existingPartner.isPresent && (excludePartnerId == null || existingPartner.get().id != excludePartnerId)
     }
 
     private fun toPartnerOutputDto(entity: PartnerEntity): PartnerOutputDto {
@@ -190,6 +259,7 @@ class PartnerService(
             waterConnectionAddress = entity.waterConnectionAddress,
             currentDebt = entity.currentDebt,
             lastBillingDate = entity.lastBillingDate,
+            isElderly = entity.isElderly,
             notes = entity.notes,
             createdAt = entity.createdAt,
             updatedAt = entity.updatedAt,

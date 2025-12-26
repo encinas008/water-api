@@ -11,3 +11,4 @@ interface MeetingTypeRepository : JpaRepository<MeetingTypeEntity, UUID> {
     fun findAllByActive(active: Boolean): MutableList<MeetingTypeEntity>
 }
 
+

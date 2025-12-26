@@ -82,7 +82,7 @@ class ReportService(
             mapOf(
                 "partnerId" to partner.id,
                 "name" to partner.fullName,
-                "documentId" to partner.partnerIdentificationNumber,
+                "documentId" to (partner.partnerIdentificationNumber ?: "N/A"),
                 "waterConnectionNumber" to (partner.waterConnectionNumber ?: "N/A"),
                 "waterMeterNumber" to (partner.waterMeterNumber ?: "N/A"),
                 "connectionStatus" to (partner.connectionStatus?.name ?: "Sin estado"),

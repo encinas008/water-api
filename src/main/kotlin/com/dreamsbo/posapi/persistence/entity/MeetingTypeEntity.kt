@@ -21,3 +21,4 @@ data class MeetingTypeEntity(
     var active: Boolean = true,
 )
 
+

@@ -47,3 +47,4 @@ data class MeetingAttendanceEntity(
     var active: Boolean = true,
 )
 
+
