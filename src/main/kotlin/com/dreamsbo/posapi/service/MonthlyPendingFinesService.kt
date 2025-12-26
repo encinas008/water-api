@@ -19,7 +19,7 @@ class MonthlyPendingFinesService(
 ) {
 
     fun getMonthlyPendingFines(partnerId: UUID, month: Int, year: Int): MonthlyPendingFinesDto {
-        val partner = partnerRepository.findById(partnerId)
+        partnerRepository.findById(partnerId)
             .orElseThrow { NotFoundEntityException("No se ha encontrado el socio. PartnerId = $partnerId") }
 
         // Calcular rango de fechas del mes

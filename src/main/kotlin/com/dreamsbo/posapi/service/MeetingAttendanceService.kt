@@ -179,7 +179,6 @@ class MeetingAttendanceService(
 
         // Obtener todos los registros de asistencia activos para esta reunión
         val existingAttendances = meetingAttendanceRepository.findByMeetingIdAndActive(meetingId, true)
-        val existingPartnerIds = existingAttendances.map { it.partner.id }.toSet()
 
         // Desactivar registros de socios que no están en la nueva lista
         existingAttendances.forEach { attendance ->

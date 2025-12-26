@@ -2,6 +2,7 @@ package com.dreamsbo.posapi.controller
 
 import com.dreamsbo.posapi.dto.*
 import com.dreamsbo.posapi.service.PartnerService
+import org.springframework.data.domain.Page
 import org.springframework.http.HttpStatus
 import org.springframework.web.bind.annotation.*
 import java.util.*
@@ -13,8 +14,12 @@ class PartnerController(
 ) {
 
     @GetMapping
-    fun getAll(): List<PartnerOutputDto> {
-        return partnerService.findAll()
+    fun getAll(
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "20") size: Int,
+        @RequestParam(required = false) search: String?
+    ): Page<PartnerOutputDto> {
+        return partnerService.findAllPaginated(page, size, search)
     }
 
     @GetMapping("/{id}")

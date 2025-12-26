@@ -9,6 +9,9 @@ import com.dreamsbo.posapi.persistence.repository.PartnerRepository
 import com.dreamsbo.posapi.persistence.repository.WaterBillRepository
 import com.dreamsbo.posapi.persistence.repository.WaterPaymentRepository
 import jakarta.transaction.Transactional
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Pageable
 import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
 import java.time.LocalDate
@@ -31,6 +34,18 @@ class PartnerService(
         }
 
         return partners
+    }
+
+    fun findAllPaginated(page: Int, size: Int, search: String?): Page<PartnerOutputDto> {
+        val pageable: Pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"))
+        
+        val partnerPage = if (search.isNullOrBlank()) {
+            partnerRepository.findAllByActive(true, pageable)
+        } else {
+            partnerRepository.findAllByActiveAndSearch(true, search.trim(), pageable)
+        }
+        
+        return partnerPage.map { toPartnerOutputDto(it) }
     }
 
     fun findById(id: UUID): PartnerOutputDto {
