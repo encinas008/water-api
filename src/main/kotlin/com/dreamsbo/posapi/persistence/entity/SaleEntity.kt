@@ -30,11 +30,6 @@ data class SaleEntity(
     @Column(name = "quantity_of_products")
     val quantityOfProducts: Int,
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "sales_status_id", nullable = false)
-    @OnDelete(action = OnDeleteAction.CASCADE)
-    var saleStatus: SaleStatusEntity,
-
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
     @OnDelete(action = OnDeleteAction.CASCADE)
@@ -54,11 +49,6 @@ data class SaleEntity(
     @JoinColumn(name = "payment_type_id", nullable = false)
     @OnDelete(action = OnDeleteAction.CASCADE)
     var paymentType: PaymentTypeEntity,
-
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "order_type_id", nullable = false)
-    @OnDelete(action = OnDeleteAction.CASCADE)
-    var orderType: OrderTypeEntity,
 
     @OneToMany(
         fetch = FetchType.LAZY,

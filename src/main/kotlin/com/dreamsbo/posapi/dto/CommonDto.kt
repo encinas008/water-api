@@ -29,24 +29,6 @@ data class CategoryOutputDto(
     val active: Boolean,
 )
 
-data class MeasurementOutputDto(
-    val id: UUID,
-    val code: String,
-    val name: String,
-    val description: String,
-
-    val createdAt: OffsetDateTime,
-    val updatedAt: OffsetDateTime?,
-    val active: Boolean,
-)
-
-data class SaleStatusOutputDto(
-    val id: UUID,
-    val code: String,
-    val name: String,
-    val description: String,
-)
-
 data class PaymentTypeOutputDto(
     val id: UUID,
     val code: String,
@@ -72,10 +54,6 @@ data class CommonOutputDto(
     val countries: MutableSet<CountryOutputDto>,
     val civilStatusTypes: MutableSet<CivilStatusTypeOutputDto>,
     val genderTypes: MutableSet<GenderTypeOutputDto>,
-    val categories: MutableSet<CategoryOutputDto>,
-    val measurements: MutableSet<MeasurementOutputDto>,
     val paymentTypes: MutableSet<PaymentTypeOutputDto>,
-    val saleStatus: MutableSet<SaleStatusOutputDto>,
     val cashFlowTypes: MutableSet<CashFlowTypeOutputDto>,
-    val orderTypes: MutableSet<OrderTypeOutputDto>,
 )

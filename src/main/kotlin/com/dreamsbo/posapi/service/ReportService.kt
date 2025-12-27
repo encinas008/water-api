@@ -35,7 +35,6 @@ class ReportService(
         val params: MutableMap<String, Any> = HashMap()
         params["productsDetail"] = JRBeanCollectionDataSource(saleDetails.products)
         params["orderNumber"] = saleDetails.orderNumber?.minus(BigDecimal.ONE).toString()
-        params["orderFor"] = saleDetails.orderFor
         params["createdAt"] = DateUtil.simpleFormat(saleDetails.createdAt).uppercase()
 
         val ticketKitchenSourceFileName = "reports/ticketKitchen.jrxml"

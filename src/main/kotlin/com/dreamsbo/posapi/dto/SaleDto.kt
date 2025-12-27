@@ -45,7 +45,6 @@ data class SaleDetailOutputDto(
     val userName: String,
     val clientName: String,
     val paymentTypeName: String,
-    val salesStatus: String,
     val quantityOfProducts: Int,
     val discount: BigDecimal,
     val moneyToBack: BigDecimal,
@@ -55,5 +54,4 @@ data class SaleDetailOutputDto(
     val updatedAt: OffsetDateTime?,
     val products: List<ItemOutputDto>?,
     val orderNumber: BigDecimal?,
-    val orderFor: String,
 )

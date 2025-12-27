@@ -3,7 +3,6 @@ package com.dreamsbo.posapi.service
 import com.dreamsbo.posapi.common.errorhandler.BadRequestException
 import com.dreamsbo.posapi.common.errorhandler.NotFoundEntityException
 import com.dreamsbo.posapi.dto.*
-import com.dreamsbo.posapi.persistence.entity.ProductEntity
 import com.dreamsbo.posapi.persistence.entity.SaleDetailEntity
 import com.dreamsbo.posapi.persistence.entity.SaleEntity
 import com.dreamsbo.posapi.persistence.repository.*
@@ -16,28 +15,19 @@ import java.util.*
 
 @Service
 class SaleService(
-    private val salesStatusTypeRepository: SaleStatusRepository,
     private val saleRepository: SaleRepository,
     private val saleDetailRepository: SaleDetailRepository,
     private val partnerRepository: PartnerRepository,
     private val paymentTypeRepository: PaymentTypeRepository,
     private val userRepository: UserRepository,
-    private val productRepository: ProductRepository,
     private val boxRepository: BoxRepository,
     private val cashBalanceRepository: CashBalanceRepository,
-    private val orderTypeRepository: OrderTypeRepository,
 ) {
 
     @Transactional
     fun create(saleInputDto: SaleInputDto): SaleOutputDto {
 
         checkOpenBoxForUser(saleInputDto.userId)
-
-        val salesStatusTypeEntity = salesStatusTypeRepository.findByNameAndActive(saleInputDto.salesStatusName, true)
-        if (salesStatusTypeEntity.isEmpty) {
-
-            throw NotFoundEntityException("No se ha encontrado el estado de venta. EstadoDeVenta = ${saleInputDto.salesStatusName}")
-        }
 
         val partnerEntity = partnerRepository.findById(saleInputDto.clientId)
         if (partnerEntity.isEmpty) {
@@ -57,19 +47,12 @@ class SaleService(
             throw NotFoundEntityException("No se ha encontrado el tipo de pago. PaymentTypeId = ${saleInputDto.paymentTypeId}")
         }
 
-        val orderTypeEntity = orderTypeRepository.findById(saleInputDto.orderTypeId)
-        if (orderTypeEntity.isEmpty) {
-
-            throw NotFoundEntityException("No se ha encontrado el tipo de order. OrderTypeId = ${saleInputDto.orderTypeId}")
-        }
-
         val boxOptional = boxRepository.findByUserId(saleInputDto.userId, true)
 
         val cashBalanceOptional = cashBalanceRepository.findOpenBoxForUser(boxOptional.get().id)
 
         val savedSale = saleRepository.save(
             SaleEntity(
-                saleStatus = salesStatusTypeEntity.get(),
                 paymentType = paymentTypeEntity.get(),
                 partner = partnerEntity.get(),
                 user = userEntity.get(),
@@ -79,7 +62,6 @@ class SaleService(
                 moneyToBack = saleInputDto.moneyToBack,
                 total = saleInputDto.total,
                 quantityOfProducts = saleInputDto.quantityOfProducts,
-                orderType = orderTypeEntity.get()
             )
         )
 
@@ -102,7 +84,6 @@ class SaleService(
         saleDetailRepository.saveAll(saleDetails)
 
         val skus = saleInputDto.items.map { it.sku }.toList()
-        reduceQuantitiesOnProducts(skus, saleInputDto.items)
 
         return SaleOutputDto(savedSale.id)
     }
@@ -118,24 +99,6 @@ class SaleService(
         if (cashBalanceOptional.isEmpty) {
             throw BadRequestException("No se ha encontrado ninguna apertura de arqueo de caja.")
         }
-    }
-
-    private fun reduceQuantitiesOnProducts(skus: List<String>, items: MutableList<ItemDto>) {
-        val products = productRepository.findBySkuInAndActive(skus, true)
-
-        val productMap: MutableMap<String, ProductEntity> = mutableMapOf()
-        products.forEach {
-            productMap[it.sku] = it
-        }
-
-        items.forEach {
-            val product = productMap[it.sku]
-            if (it.quantity <= product?.stock) {
-                product?.stock = product?.stock?.minus(it.quantity)!!
-            }
-        }
-
-        productRepository.saveAll(products);
     }
 
     fun getAllByUser(
@@ -210,7 +173,6 @@ class SaleService(
             userName = "${saleEntity.user.profile.name} ${saleEntity.user.profile.lastname}",
             clientName = saleEntity.partner.fullName,
             paymentTypeName = saleEntity.paymentType.name,
-            salesStatus = saleEntity.saleStatus.name,
             quantityOfProducts = saleEntity.quantityOfProducts,
             discount = saleEntity.discount,
             moneyToBack = saleEntity.moneyToBack,
@@ -220,7 +182,6 @@ class SaleService(
             updatedAt = saleEntity.updatedAt,
             products = productDetails,
             orderNumber = saleEntity.orderNumber,
-            orderFor = saleEntity.orderType.name
         )
     }
 }
