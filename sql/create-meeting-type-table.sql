@@ -34,3 +34,4 @@ CREATE INDEX IF NOT EXISTS idx_meeting_meeting_type_id
 COMMENT ON TABLE pos.meeting_type IS 'Tipos de reunión disponibles en el sistema';
 COMMENT ON COLUMN pos.meeting.meeting_type_id IS 'Tipo de reunión (AULL o CLASSIC)';
 
+

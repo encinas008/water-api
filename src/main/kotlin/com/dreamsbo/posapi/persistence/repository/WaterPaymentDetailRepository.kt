@@ -14,3 +14,4 @@ interface WaterPaymentDetailRepository : JpaRepository<WaterPaymentDetailEntity,
 }
 
 
+

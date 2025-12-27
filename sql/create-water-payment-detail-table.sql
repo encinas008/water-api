@@ -41,3 +41,4 @@ COMMENT ON COLUMN pos.water_payment_detail.fine_name IS 'Nombre del trabajo o re
 COMMENT ON COLUMN pos.water_payment_detail.fine_date IS 'Fecha de la ausencia';
 COMMENT ON COLUMN pos.water_payment_detail.fine_amount IS 'Monto de la multa';
 
+

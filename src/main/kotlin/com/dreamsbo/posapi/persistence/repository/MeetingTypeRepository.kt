@@ -12,3 +12,4 @@ interface MeetingTypeRepository : JpaRepository<MeetingTypeEntity, UUID> {
 }
 
 
+

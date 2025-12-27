@@ -37,3 +37,4 @@ CREATE INDEX IF NOT EXISTS idx_meeting_attendance_active
     ON pos.meeting_attendance(active) 
     WHERE active = true;
 
+

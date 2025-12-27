@@ -29,3 +29,4 @@ DROP INDEX IF EXISTS pos.idx_job_partner_partner_id;
 -- Paso 7: Eliminar la tabla job_partner
 DROP TABLE IF EXISTS pos.job_partner;
 
+

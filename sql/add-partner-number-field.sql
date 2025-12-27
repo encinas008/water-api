@@ -55,3 +55,4 @@ ALTER TABLE pos.partner
 COMMENT ON COLUMN pos.partner.partner_number IS 'Número único incremental autogenerado del socio. Identificador visible en la UI.';
 COMMENT ON SEQUENCE pos.partner_number_seq IS 'Secuencia para generar números únicos de socio';
 
+

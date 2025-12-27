@@ -12,3 +12,4 @@ ALTER TABLE pos.meeting
 COMMENT ON COLUMN pos.job.fine IS 'Multa asociada al trabajo (opcional)';
 COMMENT ON COLUMN pos.meeting.fine IS 'Multa asociada a la reunión (opcional)';
 
+

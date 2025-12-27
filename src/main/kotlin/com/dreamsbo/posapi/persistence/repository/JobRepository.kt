@@ -12,3 +12,4 @@ interface JobRepository : JpaRepository<JobEntity, UUID> {
     fun findAllByActive(active: Boolean, sort: Sort): MutableList<JobEntity>
 }
 
+

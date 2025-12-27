@@ -32,3 +32,4 @@ CREATE INDEX IF NOT EXISTS idx_job_partner_active
     ON pos.job_partner(active) 
     WHERE active = true;
 
+

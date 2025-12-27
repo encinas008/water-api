@@ -49,3 +49,4 @@ COMMENT ON COLUMN pos.attendance.present IS 'Indica si el socio asistió (true) 
 COMMENT ON COLUMN pos.attendance.check_in_time IS 'Hora de entrada del socio';
 COMMENT ON COLUMN pos.attendance.check_out_time IS 'Hora de salida del socio';
 
+

@@ -24,3 +24,4 @@ COMMENT ON COLUMN pos.meeting.hour IS 'Hora en formato 12 horas (1-12)';
 COMMENT ON COLUMN pos.meeting.minute IS 'Minuto (0-59)';
 COMMENT ON COLUMN pos.meeting.am_pm IS 'Indicador AM o PM';
 
+
