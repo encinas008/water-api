@@ -4,6 +4,7 @@ import com.dreamsbo.posapi.dto.MeetingInputDto
 import com.dreamsbo.posapi.dto.MeetingOutputDto
 import com.dreamsbo.posapi.dto.MeetingUpdateDto
 import com.dreamsbo.posapi.service.MeetingService
+import org.springframework.data.domain.Page
 import org.springframework.http.HttpStatus
 import org.springframework.web.bind.annotation.*
 import java.util.*
@@ -15,8 +16,12 @@ class MeetingController(
 ) {
 
     @GetMapping
-    fun getAll(): List<MeetingOutputDto> {
-        return meetingService.findAll()
+    fun getAll(
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "20") size: Int,
+        @RequestParam(required = false) search: String?
+    ): Page<MeetingOutputDto> {
+        return meetingService.findAllPaginated(page, size, search)
     }
 
     @GetMapping("/{id}")

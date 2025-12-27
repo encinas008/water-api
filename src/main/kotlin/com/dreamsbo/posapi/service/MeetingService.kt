@@ -11,6 +11,9 @@ import com.dreamsbo.posapi.persistence.repository.MeetingTypeRepository
 import com.dreamsbo.posapi.persistence.repository.MeetingAttendanceRepository
 import com.dreamsbo.posapi.persistence.repository.PartnerRepository
 import jakarta.transaction.Transactional
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Pageable
 import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
 import java.time.OffsetDateTime
@@ -27,6 +30,18 @@ class MeetingService(
     fun findAll(): List<MeetingOutputDto> {
         return meetingRepository.findAllByActive(true, Sort.by(Sort.Direction.DESC, "createdAt"))
             .map { toMeetingOutputDto(it) }
+    }
+
+    fun findAllPaginated(page: Int, size: Int, search: String?): Page<MeetingOutputDto> {
+        val pageable: Pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"))
+        
+        val meetingPage = if (search.isNullOrBlank()) {
+            meetingRepository.findAllByActive(true, pageable)
+        } else {
+            meetingRepository.findAllByActiveAndSearch(true, search.trim(), pageable)
+        }
+        
+        return meetingPage.map { toMeetingOutputDto(it) }
     }
 
     fun findById(id: UUID): MeetingOutputDto {
