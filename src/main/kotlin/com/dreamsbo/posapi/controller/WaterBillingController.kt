@@ -63,4 +63,9 @@ class WaterBillingController(
     fun getOverdueBills(): List<WaterBillOutputDto> {
         return waterBillingService.getOverdueBills()
     }
+
+    @GetMapping("/summary")
+    fun getBillStats(): com.dreamsbo.posapi.dto.WaterBillStatsDto {
+        return waterBillingService.getBillStats()
+    }
 }

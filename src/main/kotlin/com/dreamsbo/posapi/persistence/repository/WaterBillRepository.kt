@@ -76,4 +76,20 @@ interface WaterBillRepository : JpaRepository<WaterBillEntity, UUID> {
         @Param("search") search: String,
         pageable: Pageable
     ): Page<WaterBillEntity>
+    @Query("""
+        SELECT 
+            COUNT(b),
+            SUM(CASE WHEN b.status.code = 'PENDING' THEN 1 ELSE 0 END),
+            SUM(CASE WHEN b.status.code IN ('OVERDUE', 'CANCELLED') AND b.dueDate < :currentDate AND b.status.code != 'PAID' THEN 1 ELSE 0 END),
+            SUM(CASE WHEN b.status.code = 'PAID' THEN 1 ELSE 0 END),
+            SUM(CASE WHEN b.status.code = 'PENDING' THEN b.remainingBalance ELSE 0 END),
+            SUM(CASE WHEN b.status.code IN ('OVERDUE') THEN b.remainingBalance ELSE 0 END),
+            SUM(CASE WHEN b.status.code = 'PAID' THEN b.totalAmount ELSE 0 END)
+        FROM WaterBillEntity b 
+        WHERE b.active = :active
+    """)
+    fun getBillStats(
+        @Param("currentDate") currentDate: LocalDate,
+        @Param("active") active: Boolean
+    ): List<Array<Any>>
 }

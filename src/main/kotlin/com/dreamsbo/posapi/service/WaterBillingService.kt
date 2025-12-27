@@ -5,7 +5,9 @@ import com.dreamsbo.posapi.common.errorhandler.NotFoundEntityException
 import com.dreamsbo.posapi.dto.BillConceptItemDto
 import com.dreamsbo.posapi.dto.WaterBillDetailDto
 import com.dreamsbo.posapi.dto.WaterBillGenerationDto
+import com.dreamsbo.posapi.dto.WaterBillInputDto
 import com.dreamsbo.posapi.dto.WaterBillOutputDto
+import com.dreamsbo.posapi.dto.WaterBillStatsDto
 import com.dreamsbo.posapi.dto.WaterBillSummaryDto
 import com.dreamsbo.posapi.persistence.entity.BillConceptItemEntity
 import com.dreamsbo.posapi.persistence.entity.WaterBillEntity
@@ -147,6 +149,32 @@ class WaterBillingService(
         return bills.map { toWaterBillOutputDto(it) }
     }
 
+    fun getBillStats(): WaterBillStatsDto {
+        val stats = waterBillRepository.getBillStats(LocalDate.now(), true).firstOrNull()
+
+        return if (stats != null) {
+            WaterBillStatsDto(
+                totalBills = stats[0] as Long,
+                pendingBillsCount = stats[1] as Long,
+                overdueBillsCount = stats[2] as Long,
+                paidBillsCount = stats[3] as Long,
+                totalPendingAmount = stats[4] as BigDecimal? ?: BigDecimal.ZERO,
+                totalOverdueAmount = stats[5] as BigDecimal? ?: BigDecimal.ZERO,
+                totalPaidAmount = stats[6] as BigDecimal? ?: BigDecimal.ZERO
+            )
+        } else {
+            WaterBillStatsDto(
+                totalBills = 0,
+                pendingBillsCount = 0,
+                overdueBillsCount = 0,
+                paidBillsCount = 0,
+                totalPendingAmount = BigDecimal.ZERO,
+                totalOverdueAmount = BigDecimal.ZERO,
+                totalPaidAmount = BigDecimal.ZERO
+            )
+        }
+    }
+
     fun findAllPaginated(page: Int, size: Int, search: String?, statusCode: String?): Page<WaterBillOutputDto> {
         val pageable: Pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"))
         
@@ -265,7 +293,7 @@ class WaterBillingService(
      * La factura se crea con estado PENDING.
      */
     @Transactional
-    fun createBill(input: com.dreamsbo.posapi.dto.WaterBillInputDto): WaterBillOutputDto {
+    fun createBill(input: WaterBillInputDto): WaterBillOutputDto {
         println("📋 createBill llamado para partnerId: ${input.partnerId}, readingId: ${input.readingId}")
         
         // Validar que el socio existe
