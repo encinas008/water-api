@@ -11,6 +11,9 @@ import com.dreamsbo.posapi.persistence.entity.BillConceptItemEntity
 import com.dreamsbo.posapi.persistence.entity.WaterBillEntity
 import com.dreamsbo.posapi.persistence.repository.*
 import jakarta.transaction.Transactional
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Pageable
 import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
 import java.math.BigDecimal
@@ -142,6 +145,27 @@ class WaterBillingService(
     fun getAllBills(): List<WaterBillOutputDto> {
         val bills = waterBillRepository.findAll()
         return bills.map { toWaterBillOutputDto(it) }
+    }
+
+    fun findAllPaginated(page: Int, size: Int, search: String?, statusCode: String?): Page<WaterBillOutputDto> {
+        val pageable: Pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"))
+        
+        val billPage = when {
+            !search.isNullOrBlank() && !statusCode.isNullOrBlank() -> {
+                waterBillRepository.findAllByActiveAndStatusAndSearch(true, statusCode.trim(), search.trim(), pageable)
+            }
+            !statusCode.isNullOrBlank() -> {
+                waterBillRepository.findAllByActiveAndStatus(true, statusCode.trim(), pageable)
+            }
+            !search.isNullOrBlank() -> {
+                waterBillRepository.findAllByActiveAndSearch(true, search.trim(), pageable)
+            }
+            else -> {
+                waterBillRepository.findAllByActive(true, pageable)
+            }
+        }
+        
+        return billPage.map { toWaterBillOutputDto(it) }
     }
 
     /**

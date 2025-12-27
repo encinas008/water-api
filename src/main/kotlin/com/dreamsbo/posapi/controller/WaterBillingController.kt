@@ -6,6 +6,7 @@ import com.dreamsbo.posapi.dto.WaterBillInputDto
 import com.dreamsbo.posapi.dto.WaterBillOutputDto
 import com.dreamsbo.posapi.dto.WaterBillSummaryDto
 import com.dreamsbo.posapi.service.WaterBillingService
+import org.springframework.data.domain.Page
 import org.springframework.http.HttpStatus
 import org.springframework.web.bind.annotation.*
 import java.util.*
@@ -29,9 +30,13 @@ class WaterBillingController(
     }
 
     @GetMapping
-    fun getAll(): List<WaterBillOutputDto> {
-        var data = waterBillingService.getAllBills()
-        return data
+    fun getAll(
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "20") size: Int,
+        @RequestParam(required = false) search: String?,
+        @RequestParam(required = false) statusCode: String?
+    ): Page<WaterBillOutputDto> {
+        return waterBillingService.findAllPaginated(page, size, search, statusCode)
     }
 
     @GetMapping("/{id}")
