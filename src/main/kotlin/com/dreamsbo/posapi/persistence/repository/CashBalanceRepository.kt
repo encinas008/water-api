@@ -1,8 +1,11 @@
 package com.dreamsbo.posapi.persistence.repository
 
 import com.dreamsbo.posapi.persistence.entity.CashBalanceEntity
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
+import org.springframework.data.repository.query.Param
 import org.springframework.stereotype.Repository
 import java.time.OffsetDateTime
 import java.util.*
@@ -24,4 +27,21 @@ interface CashBalanceRepository : JpaRepository<CashBalanceEntity, UUID> {
 
     @Query("SELECT c FROM CashBalanceEntity c WHERE c.active = true ORDER BY c.openTime DESC")
     fun findAllActiveCashBalances(): List<CashBalanceEntity>
+    
+    fun findAllByActive(active: Boolean, pageable: Pageable): Page<CashBalanceEntity>
+    
+    @Query("""
+        SELECT c FROM CashBalanceEntity c 
+        WHERE c.active = :active 
+        AND (
+            LOWER(c.description) LIKE LOWER(CONCAT('%', :search, '%')) OR
+            LOWER(CONCAT(c.box.user.profile.name, ' ', c.box.user.profile.lastname)) LIKE LOWER(CONCAT('%', :search, '%'))
+        )
+        ORDER BY c.openTime DESC
+    """)
+    fun findAllByActiveAndSearch(
+        @Param("active") active: Boolean,
+        @Param("search") search: String,
+        pageable: Pageable
+    ): Page<CashBalanceEntity>
 }

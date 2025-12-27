@@ -6,11 +6,13 @@ import com.dreamsbo.posapi.dto.CashBalanceOutputDto
 import com.dreamsbo.posapi.dto.CloseCashBalanceInputDto
 import com.dreamsbo.posapi.service.CashBalanceService
 import jakarta.websocket.server.PathParam
+import org.springframework.data.domain.Page
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import java.util.*
 
@@ -55,7 +57,11 @@ class CashBalanceController(
     }
 
     @GetMapping
-    fun getAllCashBalances(): List<CashBalanceOutputDto> {
-        return cashBalanceService.findAllActiveCashBalances()
+    fun getAllCashBalances(
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "20") size: Int,
+        @RequestParam(required = false) search: String?
+    ): Page<CashBalanceOutputDto> {
+        return cashBalanceService.findAllPaginated(page, size, search)
     }
 }

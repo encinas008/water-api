@@ -10,6 +10,10 @@ import com.dreamsbo.posapi.persistence.repository.WaterPaymentRepository
 import com.dreamsbo.posapi.util.DateUtil
 import jakarta.persistence.EntityManager
 import jakarta.persistence.PersistenceContext
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Pageable
+import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
 import java.math.BigDecimal
 import java.time.OffsetDateTime
@@ -283,5 +287,29 @@ class CashBalanceService(
         }
 
         return cashBalances
+    }
+
+    fun findAllPaginated(page: Int, size: Int, search: String?): Page<CashBalanceOutputDto> {
+        val pageable: Pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "openTime"))
+        
+        val balancePage = if (search.isNullOrBlank()) {
+            cashBalanceRepository.findAllByActive(true, pageable)
+        } else {
+            cashBalanceRepository.findAllByActiveAndSearch(true, search.trim(), pageable)
+        }
+        
+        return balancePage.map { entity ->
+            CashBalanceOutputDto(
+                id = entity.id,
+                description = entity.description,
+                assignee = "${entity.box.user.profile.name} ${entity.box.user.profile.lastname}",
+                openTime = entity.openTime,
+                closeTime = entity.closeTime,
+                initialMoney = entity.initialMoney,
+                createdAt = entity.createdAt,
+                updatedAt = entity.updatedAt,
+                active = entity.active,
+            )
+        }
     }
 }
