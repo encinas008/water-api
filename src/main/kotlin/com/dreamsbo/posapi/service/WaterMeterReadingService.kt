@@ -8,6 +8,9 @@ import com.dreamsbo.posapi.dto.WaterMeterReadingUpdateDto
 import com.dreamsbo.posapi.persistence.entity.WaterMeterReadingEntity
 import com.dreamsbo.posapi.persistence.repository.*
 import jakarta.transaction.Transactional
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Pageable
 import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
 import java.math.BigDecimal
@@ -109,6 +112,18 @@ class WaterMeterReadingService(
     fun getReadingsByPeriod(startDate: LocalDate, endDate: LocalDate): List<WaterMeterReadingOutputDto> {
         val readings = waterMeterReadingRepository.findByReadingDateBetweenAndActive(startDate, endDate, true)
         return readings.map { toWaterMeterReadingOutputDto(it) }
+    }
+
+    fun findAllPaginated(page: Int, size: Int, search: String?): Page<WaterMeterReadingOutputDto> {
+        val pageable: Pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "readingDate"))
+        
+        val readingPage = if (search.isNullOrBlank()) {
+            waterMeterReadingRepository.findAllByActive(true, pageable)
+        } else {
+            waterMeterReadingRepository.findAllByActiveAndSearch(true, search.trim(), pageable)
+        }
+        
+        return readingPage.map { toWaterMeterReadingOutputDto(it) }
     }
 
     fun getReadingById(id: UUID): WaterMeterReadingOutputDto {

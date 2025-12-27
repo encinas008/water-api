@@ -1,6 +1,8 @@
 package com.dreamsbo.posapi.persistence.repository
 
 import com.dreamsbo.posapi.persistence.entity.WaterMeterReadingEntity
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.Pageable
 import org.springframework.data.domain.Sort
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
@@ -25,4 +27,20 @@ interface WaterMeterReadingRepository : JpaRepository<WaterMeterReadingEntity, U
 
     @Query("SELECT r FROM WaterMeterReadingEntity r WHERE r.partner.id = :partnerId AND YEAR(r.readingDate) = :year AND MONTH(r.readingDate) = :month AND r.active = :active")
     fun findByPartnerIdAndYearAndMonth(partnerId: UUID, year: Int, month: Int, active: Boolean): List<WaterMeterReadingEntity>
+    
+    fun findAllByActive(active: Boolean, pageable: Pageable): Page<WaterMeterReadingEntity>
+    
+    @Query("""
+        SELECT r FROM WaterMeterReadingEntity r 
+        WHERE r.active = :active 
+        AND (
+            LOWER(r.partner.fullName) LIKE LOWER(CONCAT('%', :search, '%')) OR
+            LOWER(r.partner.waterMeterNumber) LIKE LOWER(CONCAT('%', :search, '%'))
+        )
+    """)
+    fun findAllByActiveAndSearch(
+        @Param("active") active: Boolean,
+        @Param("search") search: String,
+        pageable: Pageable
+    ): Page<WaterMeterReadingEntity>
 }

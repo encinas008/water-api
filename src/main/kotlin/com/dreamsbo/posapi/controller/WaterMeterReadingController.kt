@@ -4,6 +4,7 @@ import com.dreamsbo.posapi.dto.WaterMeterReadingInputDto
 import com.dreamsbo.posapi.dto.WaterMeterReadingOutputDto
 import com.dreamsbo.posapi.dto.WaterMeterReadingUpdateDto
 import com.dreamsbo.posapi.service.WaterMeterReadingService
+import org.springframework.data.domain.Page
 import org.springframework.format.annotation.DateTimeFormat
 import org.springframework.http.HttpStatus
 import org.springframework.web.bind.annotation.*
@@ -15,6 +16,15 @@ import java.util.*
 class WaterMeterReadingController(
     private val waterMeterReadingService: WaterMeterReadingService,
 ) {
+
+    @GetMapping
+    fun getAll(
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "20") size: Int,
+        @RequestParam(required = false) search: String?
+    ): Page<WaterMeterReadingOutputDto> {
+        return waterMeterReadingService.findAllPaginated(page, size, search)
+    }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
