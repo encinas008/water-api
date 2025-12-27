@@ -7,6 +7,9 @@ import com.dreamsbo.posapi.dto.JobUpdateDto
 import com.dreamsbo.posapi.persistence.entity.JobEntity
 import com.dreamsbo.posapi.persistence.repository.JobRepository
 import jakarta.transaction.Transactional
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Pageable
 import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
 import java.time.OffsetDateTime
@@ -25,6 +28,18 @@ class JobService(
         }
 
         return jobs
+    }
+
+    fun findAllPaginated(page: Int, size: Int, search: String?): Page<JobOutputDto> {
+        val pageable: Pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"))
+        
+        val jobPage = if (search.isNullOrBlank()) {
+            jobRepository.findAllByActive(true, pageable)
+        } else {
+            jobRepository.findAllByActiveAndSearch(true, search.trim(), pageable)
+        }
+        
+        return jobPage.map { toJobOutputDto(it) }
     }
 
     fun findById(id: UUID): JobOutputDto {

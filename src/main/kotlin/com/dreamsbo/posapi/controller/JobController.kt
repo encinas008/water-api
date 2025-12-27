@@ -2,6 +2,7 @@ package com.dreamsbo.posapi.controller
 
 import com.dreamsbo.posapi.dto.*
 import com.dreamsbo.posapi.service.JobService
+import org.springframework.data.domain.Page
 import org.springframework.http.HttpStatus
 import org.springframework.web.bind.annotation.*
 import java.util.*
@@ -13,8 +14,12 @@ class JobController(
 ) {
 
     @GetMapping
-    fun getAll(): List<JobOutputDto> {
-        return jobService.findAll()
+    fun getAll(
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "20") size: Int,
+        @RequestParam(required = false) search: String?
+    ): Page<JobOutputDto> {
+        return jobService.findAllPaginated(page, size, search)
     }
 
     @GetMapping("/{id}")
