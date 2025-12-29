@@ -7,6 +7,7 @@ import org.hibernate.annotations.OnDeleteAction
 import java.math.BigDecimal
 import java.time.LocalDate
 import java.time.OffsetDateTime
+import java.time.ZoneOffset
 import java.util.*
 
 @Entity
@@ -55,7 +56,12 @@ data class PartnerEntity(
 
     var notes: String = "",
 
-    var createdAt: OffsetDateTime = OffsetDateTime.now(),
+    @Column(name = "created_at", columnDefinition = "TIMESTAMPTZ", nullable = false, updatable = false)
+    var createdAt: OffsetDateTime = OffsetDateTime.now(ZoneOffset.UTC),
+
+    @Column(name = "updated_at", columnDefinition = "TIMESTAMPTZ")
     var updatedAt: OffsetDateTime? = null,
+
+    @Column(name = "active", nullable = false)
     var active: Boolean = true,
 )

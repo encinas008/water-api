@@ -161,6 +161,14 @@ class WaterPaymentService(
         return toWaterPaymentOutputDto(savedPayment)
     }
 
+    fun getAllPayments(): List<WaterPaymentOutputDto> {
+        val payments = waterPaymentRepository.findByActive(
+            true,
+            Sort.by(Sort.Direction.DESC, "paymentDate")
+        )
+        return payments.map { toWaterPaymentOutputDto(it) }
+    }
+
     fun getPaymentHistory(partnerId: UUID): List<WaterPaymentOutputDto> {
         val payments = waterPaymentRepository.findByPartnerIdAndActive(
             partnerId,

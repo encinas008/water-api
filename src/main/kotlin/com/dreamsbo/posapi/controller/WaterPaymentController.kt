@@ -27,6 +27,11 @@ class WaterPaymentController(
         return waterPaymentService.recordPayment(input)
     }
 
+    @GetMapping
+    fun getAllPayments(): List<WaterPaymentOutputDto> {
+        return waterPaymentService.getAllPayments()
+    }
+
     @GetMapping("/partner/{partnerId}")
     fun getPaymentHistory(@PathVariable partnerId: UUID): List<WaterPaymentOutputDto> {
         return waterPaymentService.getPaymentHistory(partnerId)

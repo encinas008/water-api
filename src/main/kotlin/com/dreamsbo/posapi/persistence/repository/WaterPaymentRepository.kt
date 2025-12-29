@@ -23,6 +23,8 @@ interface WaterPaymentRepository : JpaRepository<WaterPaymentEntity, UUID> {
     ): List<WaterPaymentEntity>
 
     fun findByReceiptNumberAndActive(receiptNumber: String, active: Boolean): Optional<WaterPaymentEntity>
+    
+    fun findByActive(active: Boolean, sort: Sort): List<WaterPaymentEntity>
 
     @Query("SELECT p FROM WaterPaymentEntity p WHERE p.cashBalance.id = :cashBalanceId AND p.active = :active")
     fun findByCashBalanceId(cashBalanceId: UUID, active: Boolean = true): List<WaterPaymentEntity>
