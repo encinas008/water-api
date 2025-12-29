@@ -50,7 +50,6 @@ class WaterBillingService(
 
         partners.forEach { partner ->
             // Only generate bills for partners with water connection
-            if (partner.waterConnectionNumber != null) {
                 val latestReading = waterMeterReadingRepository.findLatestByPartnerId(partner.id, true)
 
                 val consumption = latestReading.map { it.consumption }.orElse(BigDecimal.ZERO)
@@ -74,15 +73,15 @@ class WaterBillingService(
                 )
 
                 val savedBill = waterBillRepository.save(bill)
-                
+
                 // Crear conceptos de cobro por defecto y calcular total
                 val totalFromConcepts = createDefaultBillConcepts(savedBill, input.billingPeriodStart)
-                
+
                 // Actualizar total de la factura basado en conceptos
                 savedBill.totalAmount = totalFromConcepts
                 savedBill.remainingBalance = totalFromConcepts
                 waterBillRepository.save(savedBill)
-                
+
                 generatedBills.add(savedBill)
 
                 // Update partner's last billing date and debt
@@ -90,7 +89,6 @@ class WaterBillingService(
                 partner.currentDebt = partner.currentDebt.add(savedBill.totalAmount)
                 partnerRepository.save(partner)
             }
-        }
 
         return generatedBills.map { toWaterBillOutputDto(it) }
     }
@@ -208,13 +206,6 @@ class WaterBillingService(
             .orElseThrow { NotFoundEntityException("No se ha encontrado la lectura. ReadingId = $readingId") }
 
         val partner = reading.partner
-        println("👤 Socio encontrado: ${partner.fullName}, ID: ${partner.id}, Conexión: ${partner.waterConnectionNumber}")
-
-        // Solo generar factura si el socio tiene conexión de agua
-        if (partner.waterConnectionNumber == null) {
-            println("⚠️ El socio ${partner.id} no tiene conexión de agua asignada")
-            throw BadRequestException("El socio no tiene conexión de agua asignada")
-        }
 
         // Verificar si ya existe una factura para esta lectura
         val existingBill = waterBillRepository.findAll().firstOrNull { it.reading?.id == readingId && it.active }
@@ -299,13 +290,6 @@ class WaterBillingService(
         // Validar que el socio existe
         val partner = partnerRepository.findById(input.partnerId)
             .orElseThrow { NotFoundEntityException("No se ha encontrado el socio. PartnerId = ${input.partnerId}") }
-        
-        println("👤 Socio encontrado: ${partner.fullName}, Conexión: ${partner.waterConnectionNumber}")
-        
-        // Validar que el socio tiene conexión de agua
-        if (partner.waterConnectionNumber == null) {
-            throw BadRequestException("El socio no tiene conexión de agua asignada")
-        }
         
         // Validar lectura si se proporciona
         val reading = input.readingId?.let { readingId ->
@@ -481,7 +465,6 @@ class WaterBillingService(
             billNumber = entity.billNumber,
             partnerId = entity.partner.id,
             partnerName = entity.partner.fullName,
-            waterConnectionNumber = entity.partner.waterConnectionNumber,
             readingId = entity.reading?.id,
             billingPeriodStart = entity.billingPeriodStart,
             billingPeriodEnd = entity.billingPeriodEnd,

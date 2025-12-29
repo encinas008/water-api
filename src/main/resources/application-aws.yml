@@ -5,7 +5,7 @@ server:
 # Database
 spring:
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://db-dreamsbo.clptcbmsch2x.us-east-1.rds.amazonaws.com:5432/dreamsbo?currentSchema=water}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://db-dreamsbo.clptcbmsch2x.us-east-1.rds.amazonaws.com:5432/dreamsbo?currentSchema=pos}
     username: ${SPRING_DATASOURCE_USERNAME:postgres}
     password: ${SPRING_DATASOURCE_PASSWORD:}
   jpa:

@@ -12,7 +12,6 @@ data class PartnerOutputDto(
     val partnerIdentificationNumber: String?,
     val cel: String?,
     val address: String?,
-    val waterConnectionNumber: String?,
     val waterMeterNumber: String?,
     val connectionStatusCode: String?,
     val connectionStatusName: String?,
@@ -59,7 +58,6 @@ data class PartnerUpdateDto(
 data class PartnerDebtSummaryDto(
     val partnerId: UUID,
     val partnerName: String,
-    val waterConnectionNumber: String?,
     val currentDebt: BigDecimal,
     val pendingBills: Int,
     val overdueBills: Int,

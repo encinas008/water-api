@@ -52,7 +52,6 @@ class DebtManagementService(
                     partnerId = partner.id,
                     partnerName = partner.fullName,
                     partnerIdentificationNumber = partner.partnerIdentificationNumber,
-                    waterConnectionNumber = partner.waterConnectionNumber,
                     totalDebt = partner.currentDebt,
                     pendingBillsCount = pendingBills.size,
                     overdueBillsCount = overdueBills.size,

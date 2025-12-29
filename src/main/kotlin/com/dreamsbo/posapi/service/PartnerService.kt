@@ -125,7 +125,6 @@ class PartnerService(
         input.cellphone?.let { partner.cellphone = it }
         input.address?.let { partner.address = it }
         input.observation?.let { partner.observation = it }
-        input.waterConnectionNumber?.let { partner.waterConnectionNumber = it }
         input.waterMeterNumber?.let { meterNumber ->
             val trimmedMeterNumber = meterNumber.trim().uppercase()
             
@@ -221,7 +220,6 @@ class PartnerService(
         return PartnerDebtSummaryDto(
             partnerId = partner.id,
             partnerName = partner.fullName,
-            waterConnectionNumber = partner.waterConnectionNumber,
             currentDebt = partner.currentDebt,
             pendingBills = pendingBills.size,
             overdueBills = overdueBills.size,
@@ -236,9 +234,7 @@ class PartnerService(
         val allPartners = partnerRepository.findAllByActive(true, Sort.by(Sort.Direction.DESC, "createdAt"))
 
         val filteredPartners = allPartners.filter {
-            it.fullName.contains(query, ignoreCase = true) ||
-                    it.partnerIdentificationNumber?.contains(query, ignoreCase = true) == true ||
-                    it.waterConnectionNumber?.contains(query, ignoreCase = true) == true
+            it.partnerNumber?.toString()?.contains(query, ignoreCase = true) == true
         }
 
         return filteredPartners.map { toPartnerOutputDto(it) }
@@ -265,7 +261,6 @@ class PartnerService(
             partnerIdentificationNumber = entity.partnerIdentificationNumber,
             cel = entity.cellphone,
             address = entity.address,
-            waterConnectionNumber = entity.waterConnectionNumber,
             waterMeterNumber = entity.waterMeterNumber,
             connectionStatusCode = entity.connectionStatus?.code,
             connectionStatusName = entity.connectionStatus?.name,

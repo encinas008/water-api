@@ -82,7 +82,6 @@ class ReportService(
                 "partnerId" to partner.id,
                 "name" to partner.fullName,
                 "documentId" to (partner.partnerIdentificationNumber ?: "N/A"),
-                "waterConnectionNumber" to (partner.waterConnectionNumber ?: "N/A"),
                 "waterMeterNumber" to (partner.waterMeterNumber ?: "N/A"),
                 "connectionStatus" to (partner.connectionStatus?.name ?: "Sin estado"),
                 "connectionDate" to (partner.connectionDate?.toString() ?: "N/A"),
@@ -99,7 +98,6 @@ class ReportService(
             ConsumptionReportDto(
                 partnerId = bill.partner.id,
                 partnerName = bill.partner.fullName,
-                waterConnectionNumber = bill.partner.waterConnectionNumber,
                 month = bill.billingPeriodStart.month.toString(),
                 year = bill.billingPeriodStart.year,
                 consumption = bill.consumptionM3,
@@ -156,7 +154,6 @@ class ReportService(
         val currentDate = LocalDate.now()
         
         return partners
-            .filter { it.waterConnectionNumber != null }
             .map { partner ->
                 val latestReading = waterMeterReadingRepository.findLatestByPartnerId(partner.id, true)
                 val lastReadingDate = latestReading.map { it.readingDate }.orElse(null)
@@ -167,7 +164,6 @@ class ReportService(
                 PendingReadingsReportDto(
                     partnerId = partner.id,
                     partnerName = partner.fullName,
-                    waterConnectionNumber = partner.waterConnectionNumber,
                     waterMeterNumber = partner.waterMeterNumber,
                     lastReadingDate = lastReadingDate,
                     daysSinceLastReading = daysSinceLastReading,

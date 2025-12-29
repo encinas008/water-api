@@ -37,11 +37,7 @@ interface WaterBillRepository : JpaRepository<WaterBillEntity, UUID> {
     @Query("""
         SELECT b FROM WaterBillEntity b 
         WHERE b.active = :active 
-        AND (
-            LOWER(b.partner.fullName) LIKE LOWER(CONCAT('%', :search, '%')) OR
-            LOWER(b.billNumber) LIKE LOWER(CONCAT('%', :search, '%')) OR
-            LOWER(b.partner.waterConnectionNumber) LIKE LOWER(CONCAT('%', :search, '%'))
-        )
+        AND CAST(b.partner.partnerNumber AS string) LIKE CONCAT('%', :search, '%')
     """)
     fun findAllByActiveAndSearch(
         @Param("active") active: Boolean,
@@ -64,11 +60,7 @@ interface WaterBillRepository : JpaRepository<WaterBillEntity, UUID> {
         SELECT b FROM WaterBillEntity b 
         WHERE b.active = :active 
         AND b.status.code = :statusCode
-        AND (
-            LOWER(b.partner.fullName) LIKE LOWER(CONCAT('%', :search, '%')) OR
-            LOWER(b.billNumber) LIKE LOWER(CONCAT('%', :search, '%')) OR
-            LOWER(b.partner.waterConnectionNumber) LIKE LOWER(CONCAT('%', :search, '%'))
-        )
+        AND CAST(b.partner.partnerNumber AS string) LIKE CONCAT('%', :search, '%')
     """)
     fun findAllByActiveAndStatusAndSearch(
         @Param("active") active: Boolean,

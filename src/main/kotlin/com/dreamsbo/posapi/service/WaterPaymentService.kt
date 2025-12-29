@@ -197,7 +197,6 @@ class WaterPaymentService(
             paymentDate = payment.paymentDate,
             partnerName = partner.fullName,
             partnerIdentificationNumber = partner.partnerIdentificationNumber,
-            waterConnectionNumber = partner.waterConnectionNumber,
             billNumber = bill.billNumber,
             billingPeriod = billingPeriod,
             amount = payment.amount,
@@ -258,7 +257,7 @@ class WaterPaymentService(
         return PaymentReceiptFullDto(
             receiptNumber = payment.receiptNumber,
             receiptType = receiptType,
-            partnerNumber = partner.waterConnectionNumber?.substringAfterLast("-") ?: "",
+            partnerNumber = partner.partnerNumber.toString(),
             partnerName = partner.fullName,
             partnerIdentificationNumber = partner.partnerIdentificationNumber,
             paymentDate = paymentDateFormatted,

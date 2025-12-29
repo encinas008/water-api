@@ -30,10 +30,6 @@ data class PartnerEntity(
     var observation: String = "",
     var address: String = "",
 
-    // Water connection fields
-    @Column(name = "water_connection_number")
-    var waterConnectionNumber: String? = null,
-
     @Column(name = "water_meter_number")
     var waterMeterNumber: String? = null,
 
