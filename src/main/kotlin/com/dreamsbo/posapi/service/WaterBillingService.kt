@@ -3,6 +3,7 @@ package com.dreamsbo.posapi.service
 import com.dreamsbo.posapi.common.errorhandler.BadRequestException
 import com.dreamsbo.posapi.common.errorhandler.NotFoundEntityException
 import com.dreamsbo.posapi.dto.BillConceptItemDto
+import com.dreamsbo.posapi.dto.PendingFineDto
 import com.dreamsbo.posapi.dto.WaterBillDetailDto
 import com.dreamsbo.posapi.dto.WaterBillGenerationDto
 import com.dreamsbo.posapi.dto.WaterBillInputDto
@@ -33,6 +34,7 @@ class WaterBillingService(
     private val waterPaymentRepository: WaterPaymentRepository,
     private val waterPaymentService: com.dreamsbo.posapi.service.WaterPaymentService,
     private val waterPaymentDetailRepository: com.dreamsbo.posapi.persistence.repository.WaterPaymentDetailRepository,
+    private val monthlyPendingFinesService: MonthlyPendingFinesService,
 ) {
 
     @Transactional
@@ -353,13 +355,18 @@ class WaterBillingService(
         val finalBill = waterBillRepository.save(savedBill)
         println("✅ Factura actualizada con total: ${finalBill.totalAmount}")
         
-        // Actualizar información del socio
+        // Actualizar información del socio (Deuda Factura + Multas del mes)
         println("👤 Actualizando información del socio...")
         partner.lastBillingDate = LocalDate.now()
         val previousDebt = partner.currentDebt
-        partner.currentDebt = partner.currentDebt.add(finalBill.totalAmount)
+        
+        // Obtener multas para incluirlas en la deuda del socio
+        val currentFines = monthlyPendingFinesService.getCurrentMonthPendingFines(partner.id)
+        
+        // La nueva deuda es: Deuda Anterior + Total Factura + Multas actuales
+        partner.currentDebt = partner.currentDebt.add(finalBill.totalAmount).add(currentFines.totalFines)
         partnerRepository.save(partner)
-        println("✅ Socio actualizado. Deuda anterior: $previousDebt, Nueva deuda: ${partner.currentDebt}")
+        println("✅ Socio actualizado. Deuda anterior: $previousDebt, Multas añadidas: ${currentFines.totalFines}, Nueva deuda: ${partner.currentDebt}")
         
         return toWaterBillOutputDto(finalBill)
     }
@@ -460,6 +467,20 @@ class WaterBillingService(
             entity.totalAmount.subtract(totalPaidAmount)
         }
         
+        // Obtener multas pendientes si el socio no ha pagado totalmente
+        var pendingFines: List<PendingFineDto> = emptyList()
+        var totalFinesAmount = BigDecimal.ZERO
+        
+        if (entity.status.code != "PAID") {
+            val monthlyFines = monthlyPendingFinesService.getMonthlyPendingFines(
+                entity.partner.id, 
+                entity.billingPeriodStart.monthValue, 
+                entity.billingPeriodStart.year
+            )
+            pendingFines = monthlyFines.jobAbsences + monthlyFines.meetingAbsences
+            totalFinesAmount = monthlyFines.totalFines
+        }
+        
         return WaterBillOutputDto(
             id = entity.id,
             billNumber = entity.billNumber,
@@ -480,6 +501,9 @@ class WaterBillingService(
             paidDate = entity.paidDate,
             isOverdue = isOverdue,
             concepts = concepts,
+            pendingFines = pendingFines,
+            totalFinesAmount = totalFinesAmount,
+            totalPayableAmount = entity.totalAmount.add(totalFinesAmount),
             totalFinesPaid = totalFinesPaid,
             createdAt = entity.createdAt,
             updatedAt = entity.updatedAt

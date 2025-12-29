@@ -61,11 +61,10 @@ class WaterPaymentService(
         var billAmount = input.amount // Monto de la factura (sin multas)
         
         if (input.includePendingFines) {
-            val now = LocalDate.now()
             pendingFines = monthlyPendingFinesService.getMonthlyPendingFines(
                 input.partnerId, 
-                now.monthValue, 
-                now.year
+                bill.billingPeriodStart.monthValue, 
+                bill.billingPeriodStart.year
             )
             pendingFinesAmount = pendingFines.totalFines
             
@@ -122,7 +121,7 @@ class WaterPaymentService(
         // Update bill amounts and status (usar el monto de la factura, no el total con multas)
         applyPaymentToBill(bill, billAmount)
 
-        // Update partner debt
+        // Update partner debt (Total del pago: Factura + Multas)
         partner.currentDebt = partner.currentDebt.subtract(totalPaymentAmount)
         partnerRepository.save(partner)
 
@@ -224,7 +223,20 @@ class WaterPaymentService(
                     assignedDate = concept.assignedDate,
                     amount = concept.amount
                 )
-            }
+            }.toMutableList()
+
+        // Obtener multas pagadas en este recibo
+        val paymentDetails = waterPaymentDetailRepository.findByWaterPaymentIdAndActive(paymentId, true)
+        
+        // Agregar multas como conceptos adicionales
+        paymentDetails.forEach { detail ->
+            concepts.add(BillConceptItemDto(
+                id = UUID.randomUUID(), // ID temporal para el DTO
+                conceptName = "MULTA: ${detail.fineName} (${detail.fineType})",
+                assignedDate = detail.fineDate,
+                amount = detail.fineAmount
+            ))
+        }
 
         // Formatear fecha y hora de pago
         val now = java.time.OffsetDateTime.now(java.time.ZoneOffset.ofHours(-4))
@@ -251,8 +263,9 @@ class WaterPaymentService(
         val previousReading = reading?.previousReading ?: BigDecimal.ZERO
         val consumption = reading?.consumption ?: BigDecimal.ZERO
 
-        // Convertir total a palabras
-        val totalInWords = numberToWords(bill.totalAmount)
+        // El monto total debe ser el del pago (Factura + Multas)
+        val totalPaymentAmount = payment.amount
+        val totalInWords = numberToWords(totalPaymentAmount)
 
         return PaymentReceiptFullDto(
             receiptNumber = payment.receiptNumber,
@@ -269,7 +282,7 @@ class WaterPaymentService(
             paymentMonthCode = null,
             paymentMonthDate = paymentMonthDate,
             concepts = concepts,
-            totalAmount = bill.totalAmount,
+            totalAmount = totalPaymentAmount,
             totalAmountInWords = totalInWords
         )
     }

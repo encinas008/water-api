@@ -24,6 +24,7 @@ class PartnerService(
     private val connectionStatusTypeRepository: ConnectionStatusTypeRepository,
     private val waterBillRepository: WaterBillRepository,
     private val waterPaymentRepository: WaterPaymentRepository,
+    private val debtManagementService: DebtManagementService,
 ) {
 
     fun findAll(): List<PartnerOutputDto> {
@@ -206,6 +207,7 @@ class PartnerService(
         }
 
         val partner = partnerEntity.get()
+        val currentDebt = debtManagementService.calculateTotalDebt(partner.id)
         val bills = waterBillRepository.findByPartnerIdAndActive(id, true, Sort.unsorted())
 
         val pendingBills = bills.filter { it.status.code in listOf("PENDING", "PARTIAL_PAID", "OVERDUE") }
@@ -220,7 +222,7 @@ class PartnerService(
         return PartnerDebtSummaryDto(
             partnerId = partner.id,
             partnerName = partner.fullName,
-            currentDebt = partner.currentDebt,
+            currentDebt = currentDebt,
             pendingBills = pendingBills.size,
             overdueBills = overdueBills.size,
             totalPendingAmount = totalPendingAmount,
@@ -266,7 +268,7 @@ class PartnerService(
             connectionStatusName = entity.connectionStatus?.name,
             connectionDate = entity.connectionDate,
             waterConnectionAddress = entity.waterConnectionAddress,
-            currentDebt = entity.currentDebt,
+            currentDebt = debtManagementService.calculateTotalDebt(entity.id),
             lastBillingDate = entity.lastBillingDate,
             isElderly = entity.isElderly,
             notes = entity.notes,

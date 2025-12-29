@@ -6,6 +6,7 @@ import com.dreamsbo.posapi.dto.PendingFineDto
 import com.dreamsbo.posapi.persistence.repository.JobAttendanceRepository
 import com.dreamsbo.posapi.persistence.repository.MeetingAttendanceRepository
 import com.dreamsbo.posapi.persistence.repository.PartnerRepository
+import com.dreamsbo.posapi.persistence.repository.WaterPaymentDetailRepository
 import org.springframework.stereotype.Service
 import java.math.BigDecimal
 import java.time.LocalDate
@@ -15,7 +16,8 @@ import java.util.*
 class MonthlyPendingFinesService(
     private val jobAttendanceRepository: JobAttendanceRepository,
     private val meetingAttendanceRepository: MeetingAttendanceRepository,
-    private val partnerRepository: PartnerRepository
+    private val partnerRepository: PartnerRepository,
+    private val waterPaymentDetailRepository: WaterPaymentDetailRepository
 ) {
 
     fun getMonthlyPendingFines(partnerId: UUID, month: Int, year: Int): MonthlyPendingFinesDto {
@@ -26,28 +28,33 @@ class MonthlyPendingFinesService(
         val startDate = LocalDate.of(year, month, 1)
         val endDate = startDate.withDayOfMonth(startDate.lengthOfMonth())
 
-        // Obtener ausencias de trabajos
+        // Obtener IDs de multas ya pagadas para este socio
+        val paidFineIds = waterPaymentDetailRepository.findPaidFineIdsByPartner(partnerId)
+
+        // Obtener ausencias de trabajos (filtrar pagadas)
         val jobAbsences = jobAttendanceRepository.findAbsencesByPartnerAndDateRange(
             partnerId, startDate, endDate, true
-        ).map { attendance ->
+        ).filter { it.id !in paidFineIds }
+        .map { attendance ->
             val fine = attendance.job.fine ?: BigDecimal.ZERO
             PendingFineDto(
                 id = attendance.id,
-                type = "JOB",
+                type = "TRABAJO",
                 name = attendance.job.name,
                 date = attendance.attendanceDate,
                 fine = fine
             )
         }
 
-        // Obtener ausencias de reuniones
+        // Obtener ausencias de reuniones (filtrar pagadas)
         val meetingAbsences = meetingAttendanceRepository.findAbsencesByPartnerAndDateRange(
             partnerId, startDate, endDate, true
-        ).map { attendance ->
+        ).filter { it.id !in paidFineIds }
+        .map { attendance ->
             val fine = attendance.meeting.fine ?: BigDecimal.ZERO
             PendingFineDto(
                 id = attendance.id,
-                type = "MEETING",
+                type = "REUNION",
                 name = attendance.meeting.name,
                 date = attendance.attendanceDate,
                 fine = fine

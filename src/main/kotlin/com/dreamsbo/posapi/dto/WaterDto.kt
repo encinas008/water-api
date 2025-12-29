@@ -82,6 +82,9 @@ data class WaterBillOutputDto(
     val paidDate: LocalDate?,
     val isOverdue: Boolean,
     val concepts: List<BillConceptItemDto> = emptyList(),  // Conceptos de cobro desglosados
+    val pendingFines: List<PendingFineDto> = emptyList(), // Multas pendientes (trabajos/reuniones)
+    val totalFinesAmount: BigDecimal = BigDecimal.ZERO, // Suma de multas pendientes
+    val totalPayableAmount: BigDecimal = BigDecimal.ZERO, // totalAmount + totalFinesAmount
     val totalFinesPaid: BigDecimal = BigDecimal.ZERO,  // Total de multas pagadas en esta factura
     val createdAt: OffsetDateTime,
     val updatedAt: OffsetDateTime?

@@ -1,10 +1,12 @@
 package com.dreamsbo.posapi.service
 
 import com.dreamsbo.posapi.dto.*
+import com.dreamsbo.posapi.common.errorhandler.NotFoundEntityException
 import com.dreamsbo.posapi.persistence.repository.PartnerRepository
 import com.dreamsbo.posapi.persistence.repository.WaterBillRepository
 import com.dreamsbo.posapi.persistence.repository.WaterMeterReadingRepository
 import com.dreamsbo.posapi.persistence.repository.WaterPaymentRepository
+import com.dreamsbo.posapi.persistence.repository.BillConceptItemRepository
 import com.dreamsbo.posapi.util.DateUtil
 import net.sf.jasperreports.engine.JREmptyDataSource
 import net.sf.jasperreports.engine.JasperCompileManager
@@ -16,7 +18,10 @@ import org.springframework.stereotype.Service
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.time.LocalDate
+import java.time.OffsetDateTime
+import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
+import java.util.*
 
 @Service
 class ReportService(
@@ -26,6 +31,8 @@ class ReportService(
     val waterBillRepository: WaterBillRepository,
     val waterPaymentRepository: WaterPaymentRepository,
     val waterMeterReadingRepository: WaterMeterReadingRepository,
+    val billConceptItemRepository: BillConceptItemRepository,
+    val waterPaymentDetailRepository: com.dreamsbo.posapi.persistence.repository.WaterPaymentDetailRepository,
 ) {
 
     fun generateTicketKitchen(ticketKitchenInputDto: TicketKitchenInputDto): ByteArray? {
@@ -191,4 +198,213 @@ class ReportService(
             )
         }.reversed()
     }
+
+    // Water Payment Receipt PDF Generation
+    
+    fun generateWaterPaymentReceiptPdf(paymentId: UUID): ByteArray {
+        val payment = waterPaymentRepository.findById(paymentId)
+            .orElseThrow { NotFoundEntityException("No se ha encontrado el pago. PaymentId = $paymentId") }
+        
+        val bill = payment.waterBill
+        val partner = payment.partner
+        val reading = bill.reading
+        
+        // Obtener conceptos de la factura
+        val billConcepts = billConceptItemRepository.findByWaterBillIdAndActive(bill.id, true)
+        
+        // Obtener multas pagadas en este recibo
+        val paymentDetails = waterPaymentDetailRepository.findByWaterPaymentIdAndActive(paymentId, true)
+        
+        // Convertir conceptos de factura a DTO
+        val allConceptDtos = billConcepts.map { concept ->
+            ConceptReportDto(
+                conceptName = concept.conceptName,
+                assignedDate = formatSimpleDate(concept.assignedDate),
+                amount = concept.amount
+            )
+        }.toMutableList()
+        
+        // Agregar multas como conceptos adicionales
+        paymentDetails.forEach { detail ->
+            allConceptDtos.add( ConceptReportDto(
+                conceptName = "MULTA: ${detail.fineName} (${detail.fineType})",
+                assignedDate = formatSimpleDate(detail.fineDate),
+                amount = detail.fineAmount
+            ))
+        }
+
+        // Preparar parámetros
+        val params: MutableMap<String, Any> = HashMap()
+        params["receiptNumber"] = payment.receiptNumber
+        params["receiptType"] = "NOTA DE PAGO"
+        params["partnerNumber"] = partner.partnerNumber.toString()
+        params["partnerName"] = partner.fullName
+        params["partnerIdentificationNumber"] = partner.partnerIdentificationNumber ?: ""
+        params["paymentDate"] = formatPaymentDateTime(payment.paymentDate)
+        params["currentReading"] = reading?.currentReading ?: BigDecimal.ZERO
+        params["previousReading"] = reading?.previousReading ?: BigDecimal.ZERO
+        params["consumptionM3"] = reading?.consumption ?: BigDecimal.ZERO
+        params["meterNumber"] = partner.waterMeterNumber ?: "0"
+        params["paymentMonth"] = getMonthName(bill.billingPeriodStart.monthValue).uppercase()
+        params["paymentMonthDate"] = formatMonthDate(bill.billingPeriodEnd)
+        params["communityName"] = "COMUNIDAD GUADALUPE"
+        params["conceptsList"] = allConceptDtos
+        
+        // El monto total a mostrar debe ser el monto pagado en este recibo.
+        params["totalAmount"] = payment.amount 
+        params["totalAmountInWords"] = numberToWords(payment.amount)
+        
+        val reportPath = "reports/waterPaymentReceipt.jrxml"
+        
+        val jasperPrint = JasperFillManager.fillReport(
+            JasperCompileManager.compileReport(reportPath),
+            params,
+            JREmptyDataSource()
+        )
+        
+        return JasperExportManager.exportReportToPdf(jasperPrint)
+    }
+    
+    private fun formatPaymentDateTime(date: LocalDate): String {
+        val now = OffsetDateTime.now(ZoneOffset.ofHours(-4))
+        return String.format(
+            "%02d:%02d %02d-%s-%d",
+            now.hour,
+            now.minute,
+            date.dayOfMonth,
+            getMonthName(date.monthValue),
+            date.year
+        )
+    }
+    
+    private fun formatMonthDate(date: LocalDate): String {
+        return String.format(
+            "%02d-%s-%d",
+            date.dayOfMonth,
+            getMonthName(date.monthValue),
+            date.year
+        )
+    }
+    
+    private fun formatSimpleDate(date: LocalDate): String {
+        return String.format(
+            "%02d-%s-%d",
+            date.dayOfMonth,
+            getMonthName(date.monthValue),
+            date.year
+        )
+    }
+    
+    private fun getMonthName(month: Int): String {
+        return when (month) {
+            1 -> "enero"
+            2 -> "febrero"
+            3 -> "marzo"
+            4 -> "abril"
+            5 -> "mayo"
+            6 -> "junio"
+            7 -> "julio"
+            8 -> "agosto"
+            9 -> "septiembre"
+            10 -> "octubre"
+            11 -> "noviembre"
+            12 -> "diciembre"
+            else -> ""
+        }
+    }
+    
+    private fun numberToWords(amount: BigDecimal): String {
+        val wholePart = amount.toInt()
+        val cents = (amount.remainder(BigDecimal.ONE) * BigDecimal(100)).toInt()
+        
+        val wholeWords = convertNumberToWords(wholePart)
+        val centsWords = if (cents > 0) {
+            " con ${convertNumberToWords(cents)} centavos"
+        } else {
+            ""
+        }
+        
+        return "Son $wholeWords Bolivianos$centsWords."
+    }
+    
+    private fun convertNumberToWords(number: Int): String {
+        if (number == 0) return "Cero"
+        if (number < 20) {
+            return when (number) {
+                1 -> "Uno"
+                2 -> "Dos"
+                3 -> "Tres"
+                4 -> "Cuatro"
+                5 -> "Cinco"
+                6 -> "Seis"
+                7 -> "Siete"
+                8 -> "Ocho"
+                9 -> "Nueve"
+                10 -> "Diez"
+                11 -> "Once"
+                12 -> "Doce"
+                13 -> "Trece"
+                14 -> "Catorce"
+                15 -> "Quince"
+                16 -> "Dieciséis"
+                17 -> "Diecisiete"
+                18 -> "Dieciocho"
+                19 -> "Diecinueve"
+                else -> ""
+            }
+        }
+        
+        if (number < 100) {
+            val tens = number / 10
+            val ones = number % 10
+            val tensWords = when (tens) {
+                2 -> "Veinte"
+                3 -> "Treinta"
+                4 -> "Cuarenta"
+                5 -> "Cincuenta"
+                6 -> "Sesenta"
+                7 -> "Setenta"
+                8 -> "Ochenta"
+                9 -> "Noventa"
+                else -> ""
+            }
+            return if (ones > 0) {
+                "$tensWords y ${convertNumberToWords(ones).lowercase()}"
+            } else {
+                tensWords
+            }
+        }
+        
+        if (number < 1000) {
+            val hundreds = number / 100
+            val remainder = number % 100
+            val hundredsWords = when (hundreds) {
+                1 -> "Cien"
+                2 -> "Doscientos"
+                3 -> "Trescientos"
+                4 -> "Cuatrocientos"
+                5 -> "Quinientos"
+                6 -> "Seiscientos"
+                7 -> "Setecientos"
+                8 -> "Ochocientos"
+                9 -> "Novecientos"
+                else -> ""
+            }
+            return if (remainder > 0) {
+                "$hundredsWords ${convertNumberToWords(remainder).lowercase()}"
+            } else {
+                hundredsWords
+            }
+        }
+        
+        // Para números mayores, simplificar
+        return number.toString()
+    }
+    
+    // DTO para conceptos en el reporte
+    data class ConceptReportDto(
+        val conceptName: String,
+        val assignedDate: String,
+        val amount: BigDecimal
+    )
 }
