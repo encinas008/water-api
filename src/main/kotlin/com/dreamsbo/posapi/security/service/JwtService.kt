@@ -37,7 +37,6 @@ class JwtService(
         claims[SecurityConstants.NAME_FIELD] = user.profile.name
         claims[SecurityConstants.LAST_NAME_FIELD] = user.profile.lastname
         claims[SecurityConstants.GENDER_FIELD] = user.profile.gender.name
-//        claims[SecurityConstants.SPECIALITY_FIELD] = user.profile.speciality?.name ?: ""
         claims[SecurityConstants.ROLE_FIELD] = user.userRole?.first()?.role?.name
             ?: throw BadRequestException("No roles assigned to user. UserId = ${user.id}")
 
