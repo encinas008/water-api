@@ -17,7 +17,6 @@ class CashFlowService(
     private val paymentTypeRepository: PaymentTypeRepository,
     private val cashFlowTypeRepository: CashFlowTypeRepository,
     private val cashBalanceRepository: CashBalanceRepository,
-    private val saleRepository: SaleRepository,
     private val boxRepository: BoxRepository,
     private val waterPaymentRepository: WaterPaymentRepository
 ) {
@@ -143,13 +142,7 @@ class CashFlowService(
 
     private fun getCurrentCashInBox(cashBalanceId: UUID): BigDecimal {
 
-        // Obtener efectivo de ventas
-        val sales = saleRepository.findByCashBalanceIdAndPaymentTypeName(cashBalanceId, "EFECTIVO")
-        val salesByType = sales.groupBy { it.paymentType.name }
         var cashFromSales = BigDecimal(0)
-        salesByType["EFECTIVO"]?.forEach {
-            cashFromSales = cashFromSales.plus(it.subTotal)
-        }
 
         // Obtener efectivo de pagos de agua
         val waterPayments = waterPaymentRepository.findByCashBalanceId(cashBalanceId, true)
