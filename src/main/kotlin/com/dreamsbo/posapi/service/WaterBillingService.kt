@@ -486,6 +486,7 @@ class WaterBillingService(
             billNumber = entity.billNumber,
             partnerId = entity.partner.id,
             partnerName = entity.partner.fullName,
+            partnerNumber = entity.partner.partnerNumber,
             readingId = entity.reading?.id,
             billingPeriodStart = entity.billingPeriodStart,
             billingPeriodEnd = entity.billingPeriodEnd,

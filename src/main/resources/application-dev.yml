@@ -52,7 +52,7 @@ cloud:
 # Images
 images:
   client-application:
-    path: ${IMAGES_CLIENT_APPLICATION_PATH:/home/rafaworkspace/projects/pos-ui}
+    path: ${IMAGES_CLIENT_APPLICATION_PATH:/home/rafaworkspace/projects/water-ui}
   store:
     path: ${IMAGES_CLIENT_APPLICATION_STORE_PATH:/src/assets/images/}
   access:

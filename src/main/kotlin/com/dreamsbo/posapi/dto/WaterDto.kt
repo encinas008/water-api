@@ -67,6 +67,7 @@ data class WaterBillOutputDto(
     val billNumber: String,
     val partnerId: UUID,
     val partnerName: String,
+    val partnerNumber: Long?,
     val readingId: UUID?,
     val billingPeriodStart: LocalDate,
     val billingPeriodEnd: LocalDate,

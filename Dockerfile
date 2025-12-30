@@ -9,7 +9,7 @@ LABEL maintainer="dreamsbo"
 WORKDIR /app
 
 # Copy the JAR file to the container
-COPY target/pos-api-1.0.0.jar application.jar
+COPY target/water-api-1.0.0.jar application.jar
 
 # Copy reports to container
 ADD /reports /app/reports

@@ -1,7 +1,7 @@
 services:
   postgres:
     restart: always
-    container_name: pos-db
+    container_name: water-db
     image: 'postgres:16.0'
     environment:
       POSTGRES_USER: 'postgres'
@@ -12,21 +12,21 @@ services:
     ports:
       - '5432:5432'
 
-  pos-ui:
+  water-ui:
     restart: always
-    container_name: pos-ui
-    image: 'encinas008/pos-ui:1.0.0'
+    container_name: water-ui
+    image: 'encinas008/water-ui:1.0.0'
     volumes:
       - './shared-data:/usr/share/nginx/html/assets/images'
     ports:
       - '4200:80'
 
-  pos-api:
+  water-api:
     restart: always
-    container_name: pos-api
+    container_name: water-api
     depends_on:
       - postgres
-    image: 'encinas008/pos-api:1.0.0'
+    image: 'encinas008/water-api:1.0.0'
     ports:
       - '8085:8085'
     environment:
@@ -43,7 +43,7 @@ services:
       TIME_ZONE: 'UTC+4'
       EXPIRE_MEDICAL_HISTORY_IN_HOURS: 72
     volumes_from:
-      - pos-ui:rw
+      - water-ui:rw
 
 volumes:
   shared-data:

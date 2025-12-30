@@ -9,10 +9,10 @@
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <groupId>com.dreamsbo</groupId>
-    <artifactId>pos-api</artifactId>
+    <artifactId>water-api</artifactId>
     <version>1.0.0</version>
-    <name>pos-api</name>
-    <description>Manage products, clients, sales, reports</description>
+    <name>water-api</name>
+    <description>Manage partners, consumptions, reports</description>
     <properties>
         <java.version>17</java.version>
         <kotlin.version>1.9.20-RC</kotlin.version>
