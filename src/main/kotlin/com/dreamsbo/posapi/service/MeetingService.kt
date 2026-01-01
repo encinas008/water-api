@@ -63,14 +63,15 @@ class MeetingService(
         }
 
         val meeting = MeetingEntity(
-            name = input.name,
+            name = input.name.uppercase().trim(),
             meetingDate = input.meetingDate,
             hour = input.hour,
             minute = input.minute,
             amPm = input.amPm.uppercase(),
             meetingType = meetingType,
             description = input.description ?: "",
-            fine = input.fine
+            fine = input.fine,
+            waitingMinutes = input.waitingMinutes
         )
         val savedMeeting = meetingRepository.save(meeting)
         
@@ -91,7 +92,7 @@ class MeetingService(
 
         val meeting = meetingEntity.get()
 
-        input.name?.let { meeting.name = it }
+        input.name?.let { meeting.name = it.uppercase().trim() }
         input.meetingDate?.let { meeting.meetingDate = it }
         
         // Validar y actualizar hora si se proporciona
@@ -114,6 +115,7 @@ class MeetingService(
         
         input.description?.let { meeting.description = it }
         input.fine?.let { meeting.fine = it }
+        input.waitingMinutes?.let { meeting.waitingMinutes = it }
 
         meeting.updatedAt = OffsetDateTime.now()
 
@@ -161,7 +163,7 @@ class MeetingService(
     }
 
     @Transactional
-    private fun assignAllPartnersToClassicMeeting(meeting: MeetingEntity) {
+    fun assignAllPartnersToClassicMeeting(meeting: MeetingEntity) {
         // Obtener todos los socios activos
         val allPartners = partnerRepository.findAllByActive(true, Sort.by(Sort.Direction.ASC, "partnerNumber"))
         
@@ -199,6 +201,7 @@ class MeetingService(
             meetingTypeName = entity.meetingType?.name,
             description = entity.description,
             fine = entity.fine,
+            waitingMinutes = entity.waitingMinutes,
             createdAt = entity.createdAt,
             updatedAt = entity.updatedAt,
             active = entity.active

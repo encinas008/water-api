@@ -55,7 +55,14 @@ class WaterBillingService(
                 val latestReading = waterMeterReadingRepository.findLatestByPartnerId(partner.id, true)
 
                 val consumption = latestReading.map { it.consumption }.orElse(BigDecimal.ZERO)
-                val baseAmount = consumption * input.ratePerM3
+                
+                // Nueva lógica: Los primeros 15m3 están incluidos en la Tarifa Básica (15 BS)
+                // El baseAmount de la factura será 0 si es <= 15m3, o el excedente si es > 15m3
+                val baseAmount = if (consumption <= BigDecimal("15")) {
+                    BigDecimal.ZERO
+                } else {
+                    consumption.subtract(BigDecimal("15")).multiply(BigDecimal("5"))
+                }
 
                 val billNumber = generateBillNumber(partner.id)
 
@@ -236,7 +243,14 @@ class WaterBillingService(
         val dueDate = readingDate.plusDays(15)
 
         val consumption = reading.consumption
-        val baseAmount = consumption * defaultRatePerM3
+        
+        // Nueva lógica: Los primeros 15m3 están incluidos en la Tarifa Básica (15 BS)
+        val excessAmount = if (consumption <= BigDecimal("15")) {
+            BigDecimal.ZERO
+        } else {
+            consumption.subtract(BigDecimal("15")).multiply(BigDecimal("5"))
+        }
+        val baseAmount = excessAmount
 
         val billNumber = generateBillNumber(partner.id)
 
@@ -318,8 +332,13 @@ class WaterBillingService(
             }
         println("✅ Estado PENDING encontrado: ${pendingStatus.name}")
         
-        // Calcular monto base
-        val baseAmount = input.consumptionM3 * input.ratePerM3
+        // Nueva lógica: Los primeros 15m3 están incluidos en la Tarifa Básica (15 BS)
+        val excessAmount = if (input.consumptionM3 <= BigDecimal("15")) {
+            BigDecimal.ZERO
+        } else {
+            input.consumptionM3.subtract(BigDecimal("15")).multiply(BigDecimal("5"))
+        }
+        val baseAmount = excessAmount
         
         // Generar número de factura
         val billNumber = generateBillNumber(partner.id)
@@ -384,16 +403,19 @@ class WaterBillingService(
         // - Tarifa básica: 15.0 BS
         // - Aporte a la OTB: 3.0 BS
         
-        // Crear concepto para el consumo de agua
-        val consumptionConcept = BillConceptItemEntity(
-            waterBill = bill,
-            conceptName = "Consumo de agua (${bill.consumptionM3} m³ × ${bill.ratePerM3} Bs/m³)",
-            assignedDate = assignedDate,
-            amount = bill.baseAmount
-        )
+        // Crear concepto para el consumo excedente si aplica
+        val excessConcept = if (bill.consumptionM3 > BigDecimal("15")) {
+            val excessM3 = bill.consumptionM3.subtract(BigDecimal("15"))
+            BillConceptItemEntity(
+                waterBill = bill,
+                conceptName = "Multa por exceso de consumo de agua ($excessM3 m³ × 5 Bs/m³)",
+                assignedDate = assignedDate,
+                amount = bill.baseAmount // Ya calculado como excedente en generateBill
+            )
+        } else null
         
         // Conceptos adicionales fijos
-        val additionalConcepts = listOf(
+        val additionalConcepts = mutableListOf(
             BillConceptItemEntity(
                 waterBill = bill,
                 conceptName = "Aporte al deporte",
@@ -414,13 +436,15 @@ class WaterBillingService(
             )
         )
         
-        // Guardar todos los conceptos (consumo + adicionales)
-        val allConcepts = listOf(consumptionConcept) + additionalConcepts
+        // Combinar conceptos
+        val allConcepts = mutableListOf<BillConceptItemEntity>()
+        excessConcept?.let { allConcepts.add(it) }
+        allConcepts.addAll(additionalConcepts)
+        
         billConceptItemRepository.saveAll(allConcepts)
         
-        // Retornar total: baseAmount (consumo) + conceptos adicionales
-        val additionalTotal = additionalConcepts.sumOf { it.amount }
-        return bill.baseAmount.plus(additionalTotal)
+        // Retornar total
+        return allConcepts.sumOf { it.amount }
     }
 
     private fun toWaterBillOutputDto(entity: WaterBillEntity): WaterBillOutputDto {

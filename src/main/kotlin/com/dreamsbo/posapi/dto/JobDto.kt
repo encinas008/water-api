@@ -20,12 +20,12 @@ data class JobInputDto(
     val name: String,
     val startDate: LocalDate,
     val description: String = "",
-    val fine: java.math.BigDecimal? = null
+    val fine: BigDecimal
 )
 
 data class JobUpdateDto(
     val name: String?,
     val startDate: LocalDate?,
     val description: String?,
-    val fine: java.math.BigDecimal?
+    val fine: BigDecimal?
 )

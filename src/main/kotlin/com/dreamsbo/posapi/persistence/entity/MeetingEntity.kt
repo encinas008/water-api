@@ -40,7 +40,10 @@ data class MeetingEntity(
     var description: String = "",
 
     @Column(name = "fine", precision = 19, scale = 2)
-    var fine: java.math.BigDecimal? = null,
+    var fine: java.math.BigDecimal,
+
+    @Column(name = "waiting_minutes")
+    var waitingMinutes: Int = 0,
 
     var createdAt: OffsetDateTime = OffsetDateTime.now(),
     var updatedAt: OffsetDateTime? = null,

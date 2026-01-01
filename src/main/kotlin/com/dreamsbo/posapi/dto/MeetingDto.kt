@@ -15,7 +15,8 @@ data class MeetingOutputDto(
     val meetingTypeCode: String?,
     val meetingTypeName: String?,
     val description: String,
-    val fine: BigDecimal?,
+    val fine: BigDecimal,
+    val waitingMinutes: Int,
     val active: Boolean,
     val createdAt: OffsetDateTime,
     val updatedAt: OffsetDateTime?
@@ -29,7 +30,8 @@ data class MeetingInputDto(
     val amPm: String, // "AM" o "PM"
     val meetingTypeCode: String? = null,
     val description: String? = null,
-    val fine: BigDecimal? = null
+    val fine: BigDecimal,
+    val waitingMinutes: Int = 0
 )
 
 data class MeetingUpdateDto(
@@ -40,6 +42,7 @@ data class MeetingUpdateDto(
     val amPm: String?,
     val meetingTypeCode: String?,
     val description: String?,
-    val fine: BigDecimal?
+    val fine: BigDecimal,
+    val waitingMinutes: Int? = null
 )
 
