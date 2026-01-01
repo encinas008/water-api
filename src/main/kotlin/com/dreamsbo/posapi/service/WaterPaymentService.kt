@@ -104,6 +104,17 @@ class WaterPaymentService(
             input.observation
         }
 
+        // Obtener y actualizar el correlativo de la sesión si existe (con bloqueo para concurrencia)
+        var correlativeNumber: Int? = null
+        input.cashBalanceId?.let { cashBalanceId ->
+            val cashBalance = cashBalanceRepository.findByIdLocked(cashBalanceId)
+                .orElseThrow { NotFoundEntityException("Balance de caja no encontrada!") }
+
+            cashBalance.lastCorrelative += 1
+            correlativeNumber = cashBalance.lastCorrelative
+            cashBalanceRepository.save(cashBalance)
+        }
+
         val payment = WaterPaymentEntity(
             waterBill = bill,
             partner = partner,
@@ -113,7 +124,8 @@ class WaterPaymentService(
             cashBalance = cashBalanceOptional?.orElse(null),
             user = user,
             receiptNumber = receiptNumber,
-            observation = observationText
+            observation = observationText,
+            correlativeNumber = correlativeNumber
         )
 
         val savedPayment = waterPaymentRepository.save(payment)
@@ -210,7 +222,8 @@ class WaterPaymentService(
             paymentTypeName = payment.paymentType.name,
             cashierName = "${payment.user.profile.name} ${payment.user.profile.lastname}",
             previousBalance = previousBalance,
-            newBalance = newBalance
+            newBalance = newBalance,
+            correlativeNumber = payment.correlativeNumber
         )
     }
 
@@ -291,7 +304,8 @@ class WaterPaymentService(
             paymentMonthDate = paymentMonthDate,
             concepts = concepts,
             totalAmount = totalPaymentAmount,
-            totalAmountInWords = totalInWords
+            totalAmountInWords = totalInWords,
+            correlativeNumber = payment.correlativeNumber
         )
     }
 
@@ -503,6 +517,7 @@ class WaterPaymentService(
             receiptNumber = entity.receiptNumber,
             cashierName = "${entity.user.profile.name} ${entity.user.profile.lastname}",
             observation = entity.observation,
+            correlativeNumber = entity.correlativeNumber,
             paymentDetail = paymentDetail,
             createdAt = entity.createdAt
         )

@@ -40,6 +40,7 @@
 	<parameter name="totalAmountInWords" class="java.lang.String"/>
 	<parameter name="communityName" class="java.lang.String"/>
 	<parameter name="conceptsList" class="java.util.List"/>
+	<parameter name="correlativeNumber" class="java.lang.Integer"/>
 	
 	<queryString>
 		<![CDATA[]]>
@@ -63,6 +64,11 @@
 				<reportElement x="0" y="25" width="370" height="20" uuid="48799087-0b98-4978-855a-bc89dfa93736"/>
 				<textElement textAlignment="Center"><font fontName="FreeSans" size="12" isBold="true"/></textElement>
 				<textFieldExpression><![CDATA["\"" + $P{communityName} + "\""]]></textFieldExpression>
+			</textField>
+			<textField>
+				<reportElement x="270" y="0" width="100" height="20" uuid="d6e87b7a-6b5d-4951-8e9a-7c9e8d4a5b6c" forecolor="#CC0000"/>
+				<textElement textAlignment="Right"><font fontName="FreeSans" size="12" isBold="true"/></textElement>
+				<textFieldExpression><![CDATA["N° " + $P{correlativeNumber}]]></textFieldExpression>
 			</textField>
 			<textField>
 				<reportElement x="0" y="45" width="370" height="20" uuid="c49449bb-5b18-4007-aa2e-cad9c7e29217"/>
@@ -224,6 +230,11 @@
 				<reportElement x="382" y="25" width="370" height="20" uuid="464f93d4-2f86-433f-b28e-2df26f1ace32"/>
 				<textElement textAlignment="Center"><font fontName="FreeSans" size="12" isBold="true"/></textElement>
 				<textFieldExpression><![CDATA["\"" + $P{communityName} + "\""]]></textFieldExpression>
+			</textField>
+			<textField>
+				<reportElement x="652" y="0" width="100" height="20" uuid="e7f9a8b1-c2d1-4c3e-a4e5-9d8f7b6c5a4d" forecolor="#CC0000"/>
+				<textElement textAlignment="Right"><font fontName="FreeSans" size="12" isBold="true"/></textElement>
+				<textFieldExpression><![CDATA["N° " + $P{correlativeNumber}]]></textFieldExpression>
 			</textField>
 			<staticText>
 				<reportElement x="382" y="45" width="370" height="20" uuid="fc61f1d9-7532-4ad0-9917-8528d570faa5"/>

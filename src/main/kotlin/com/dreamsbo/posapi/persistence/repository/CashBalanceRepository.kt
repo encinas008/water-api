@@ -3,7 +3,9 @@ package com.dreamsbo.posapi.persistence.repository
 import com.dreamsbo.posapi.persistence.entity.CashBalanceEntity
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
+import jakarta.persistence.LockModeType
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Lock
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import org.springframework.stereotype.Repository
@@ -12,6 +14,10 @@ import java.util.*
 
 @Repository
 interface CashBalanceRepository : JpaRepository<CashBalanceEntity, UUID> {
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT c FROM CashBalanceEntity c WHERE c.id = :id")
+    fun findByIdLocked(id: UUID): Optional<CashBalanceEntity>
 
     @Query("SELECT c FROM CashBalanceEntity c WHERE c.box.user.id = :userId AND c.createdAt >= :fromDate AND c.createdAt < :toDate ORDER BY c.createdAt DESC")
     fun findCashBalancesByUserAndRangeOfDates(

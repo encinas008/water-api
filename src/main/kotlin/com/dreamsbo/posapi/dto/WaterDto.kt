@@ -144,6 +144,7 @@ data class WaterPaymentOutputDto(
     val receiptNumber: String,
     val cashierName: String,
     val observation: String,
+    val correlativeNumber: Int? = null,
     val paymentDetail: PaymentDetailDto? = null, // Detalle del pago incluyendo multas
     val createdAt: OffsetDateTime
 )
@@ -159,7 +160,8 @@ data class PaymentReceiptDto(
     val paymentTypeName: String,
     val cashierName: String,
     val previousBalance: BigDecimal,
-    val newBalance: BigDecimal
+    val newBalance: BigDecimal,
+    val correlativeNumber: Int? = null
 )
 
 // Pending Fines DTOs
@@ -235,6 +237,7 @@ data class PaymentReceiptFullDto(
     val concepts: List<BillConceptItemDto>,  // Conceptos desglosados
     val totalAmount: BigDecimal,  // IMPORTE TOTAL
     val totalAmountInWords: String,  // Total en palabras (ej: "Son Veinte Bolivianos.")
+    val correlativeNumber: Int? = null,
     val communityName: String = "COMUNIDAD GUADALUPE"  // Nombre de la comunidad
 )
 

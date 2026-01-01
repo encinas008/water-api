@@ -236,6 +236,7 @@ class ReportService(
         // Preparar parámetros
         val params: MutableMap<String, Any> = HashMap()
         params["receiptNumber"] = payment.receiptNumber
+        params["correlativeNumber"] = payment.correlativeNumber ?: 0
         params["receiptType"] = "NOTA DE PAGO"
         params["partnerNumber"] = partner.partnerNumber.toString()
         params["partnerName"] = partner.fullName

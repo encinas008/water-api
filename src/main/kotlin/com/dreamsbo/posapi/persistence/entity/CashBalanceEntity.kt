@@ -38,6 +38,9 @@ data class CashBalanceEntity(
     @OnDelete(action = OnDeleteAction.CASCADE)
     var box: BoxEntity,
 
+    @Column(name = "last_correlative")
+    var lastCorrelative: Int = 0,
+
     var createdAt: OffsetDateTime = OffsetDateTime.now(),
     var updatedAt: OffsetDateTime? = null,
     var active: Boolean = true,

@@ -52,6 +52,9 @@ data class WaterPaymentEntity(
 
     var observation: String = "",
 
+    @Column(name = "correlative_number")
+    var correlativeNumber: Int? = null,
+
     var createdAt: OffsetDateTime = OffsetDateTime.now(),
     var updatedAt: OffsetDateTime? = null,
     var active: Boolean = true,
