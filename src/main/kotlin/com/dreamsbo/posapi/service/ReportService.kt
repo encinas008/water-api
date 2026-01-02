@@ -207,10 +207,12 @@ class ReportService(
         
         val bill = payment.waterBill
         val partner = payment.partner
-        val reading = bill.reading
+        val reading = bill?.reading
         
-        // Obtener conceptos de la factura
-        val billConcepts = billConceptItemRepository.findByWaterBillIdAndActive(bill.id, true)
+        // Obtener conceptos de la factura (si existe)
+        val billConcepts = bill?.let { 
+            billConceptItemRepository.findByWaterBillIdAndActive(it.id, true)
+        } ?: emptyList()
         
         // Obtener multas pagadas en este recibo
         val paymentDetails = waterPaymentDetailRepository.findByWaterPaymentIdAndActive(paymentId, true)
@@ -233,6 +235,15 @@ class ReportService(
             ))
         }
 
+        // Si no hay factura, agregar concepto de instalación
+        if (bill == null) {
+            allConceptDtos.add(ConceptReportDto(
+                conceptName = "INSTALACIÓN DE AGUA",
+                assignedDate = formatSimpleDate(payment.paymentDate),
+                amount = payment.amount
+            ))
+        }
+
         // Preparar parámetros
         val params: MutableMap<String, Any> = HashMap()
         params["receiptNumber"] = payment.receiptNumber
@@ -246,8 +257,15 @@ class ReportService(
         params["previousReading"] = reading?.previousReading ?: BigDecimal.ZERO
         params["consumptionM3"] = reading?.consumption ?: BigDecimal.ZERO
         params["meterNumber"] = partner.waterMeterNumber ?: "0"
-        params["paymentMonth"] = getMonthName(bill.billingPeriodStart.monthValue).uppercase()
-        params["paymentMonthDate"] = formatMonthDate(bill.billingPeriodEnd)
+        
+        if (bill != null) {
+            params["paymentMonth"] = getMonthName(bill.billingPeriodStart.monthValue).uppercase()
+            params["paymentMonthDate"] = formatMonthDate(bill.billingPeriodEnd)
+        } else {
+            params["paymentMonth"] = "INSTALACIÓN"
+            params["paymentMonthDate"] = formatMonthDate(payment.paymentDate)
+        }
+        
         params["communityName"] = "COMUNIDAD GUADALUPE"
         params["conceptsList"] = allConceptDtos
         
@@ -255,7 +273,11 @@ class ReportService(
         params["totalAmount"] = payment.amount 
         params["totalAmountInWords"] = numberToWords(payment.amount)
         
-        val reportPath = "reports/waterPaymentReceipt.jrxml"
+        val reportPath = if (bill != null) {
+            "reports/waterPaymentReceipt.jrxml"
+        } else {
+            "reports/waterInstallationReceipt.jrxml"
+        }
         
         val jasperPrint = JasperFillManager.fillReport(
             JasperCompileManager.compileReport(reportPath),
@@ -318,14 +340,10 @@ class ReportService(
         val wholePart = amount.toInt()
         val cents = (amount.remainder(BigDecimal.ONE) * BigDecimal(100)).toInt()
         
-        val wholeWords = convertNumberToWords(wholePart)
-        val centsWords = if (cents > 0) {
-            " con ${convertNumberToWords(cents)} centavos"
-        } else {
-            ""
-        }
+        val wholeWords = convertNumberToWords(wholePart).uppercase()
+        val centsString = String.format("%02d", cents)
         
-        return "Son $wholeWords Bolivianos$centsWords."
+        return "$wholeWords $centsString/100 BOLIVIANOS"
     }
     
     private fun convertNumberToWords(number: Int): String {
@@ -396,6 +414,24 @@ class ReportService(
             } else {
                 hundredsWords
             }
+        }
+
+        if (number == 1000) return "Mil"
+
+        if (number < 2000) {
+             val remainder = number % 1000
+             return if (remainder > 0) "Mil " + convertNumberToWords(remainder).lowercase() else "Mil"
+        }
+
+        if (number < 1000000) {
+             val thousands = number / 1000
+             val remainder = number % 1000
+             val thousandsWords = convertNumberToWords(thousands)
+             return if (remainder > 0) {
+                 "$thousandsWords mil ${convertNumberToWords(remainder).lowercase()}"
+             } else {
+                 "$thousandsWords mil"
+             }
         }
         
         // Para números mayores, simplificar

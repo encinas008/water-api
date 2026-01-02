@@ -38,8 +38,10 @@ class WaterPaymentService(
 
     @Transactional
     fun recordPayment(input: WaterPaymentInputDto): WaterPaymentOutputDto {
-        val bill = waterBillRepository.findById(input.waterBillId)
-            .orElseThrow { NotFoundEntityException("No se ha encontrado la factura. BillId = ${input.waterBillId}") }
+        val bill = input.waterBillId?.let {
+            waterBillRepository.findById(it)
+                .orElseThrow { NotFoundEntityException("No se ha encontrado la factura. BillId = $it") }
+        }
 
         val partner = partnerRepository.findById(input.partnerId)
             .orElseThrow { NotFoundEntityException("No se ha encontrado el socio. PartnerId = ${input.partnerId}") }
@@ -60,7 +62,7 @@ class WaterPaymentService(
         var pendingFines: MonthlyPendingFinesDto? = null
         var billAmount = input.amount // Monto de la factura (sin multas)
         
-        if (input.includePendingFines) {
+        if (input.includePendingFines && bill != null) {
             pendingFines = monthlyPendingFinesService.getMonthlyPendingFines(
                 input.partnerId, 
                 bill.billingPeriodStart.monthValue, 
@@ -79,15 +81,17 @@ class WaterPaymentService(
             throw BadRequestException("El monto del pago debe ser mayor a cero")
         }
 
-        // Validar que el monto de factura no exceda el saldo pendiente
-        if (billAmount > bill.remainingBalance) {
+        // Validar que el monto de factura no exceda el saldo pendiente (si hay factura)
+        if (bill != null && billAmount > bill.remainingBalance) {
             throw BadRequestException("El monto de la factura (${billAmount}) no puede ser mayor al saldo pendiente (${bill.remainingBalance})")
         }
 
-        // Validar que el monto total no exceda el máximo permitido
-        val maxAllowedAmount = bill.remainingBalance.add(pendingFinesAmount)
-        if (totalPaymentAmount > maxAllowedAmount) {
-            throw BadRequestException("El monto total del pago (${totalPaymentAmount}) no puede ser mayor al saldo pendiente de la factura (${bill.remainingBalance}) más las multas pendientes (${pendingFinesAmount})")
+        // Validar que el monto total no exceda el máximo permitido (si hay factura)
+        if (bill != null) {
+            val maxAllowedAmount = bill.remainingBalance.add(pendingFinesAmount)
+            if (totalPaymentAmount > maxAllowedAmount) {
+                throw BadRequestException("El monto total del pago (${totalPaymentAmount}) no puede ser mayor al saldo pendiente de la factura (${bill.remainingBalance}) más las multas pendientes (${pendingFinesAmount})")
+            }
         }
 
         val receiptNumber = generateReceiptNumber(partner.id)
@@ -130,8 +134,10 @@ class WaterPaymentService(
 
         val savedPayment = waterPaymentRepository.save(payment)
 
-        // Update bill amounts and status (usar el monto de la factura, no el total con multas)
-        applyPaymentToBill(bill, billAmount)
+        // Update bill amounts and status (si hay factura)
+        bill?.let { 
+            applyPaymentToBill(it, billAmount)
+        }
 
         // Update partner debt (Total del pago: Factura + Multas)
         partner.currentDebt = partner.currentDebt.subtract(totalPaymentAmount)
@@ -203,20 +209,24 @@ class WaterPaymentService(
         val bill = payment.waterBill
         val partner = payment.partner
 
-        // Formato: "Enero 2025" (solo mes y año)
-        val monthName = getMonthName(bill.billingPeriodStart.monthValue)
-        val capitalizedMonth = monthName.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
-        val billingPeriod = "$capitalizedMonth ${bill.billingPeriodStart.year}"
+        // Formato: "Enero 2025" (solo mes y año) o "INSTALACIÓN"
+        val billingPeriod = if (bill != null) {
+            val monthName = getMonthName(bill.billingPeriodStart.monthValue)
+            val capitalizedMonth = monthName.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
+            "$capitalizedMonth ${bill.billingPeriodStart.year}"
+        } else {
+            "INSTALACIÓN DE AGUA"
+        }
 
-        val previousBalance = bill.remainingBalance.add(payment.amount)
-        val newBalance = bill.remainingBalance
+        val previousBalance = if (bill != null) bill.remainingBalance.add(payment.amount) else BigDecimal.ZERO
+        val newBalance = bill?.remainingBalance ?: BigDecimal.ZERO
 
         return PaymentReceiptDto(
             receiptNumber = payment.receiptNumber,
             paymentDate = payment.paymentDate,
             partnerName = partner.fullName,
             partnerIdentificationNumber = partner.partnerIdentificationNumber,
-            billNumber = bill.billNumber,
+            billNumber = bill?.billNumber ?: "N/A",
             billingPeriod = billingPeriod,
             amount = payment.amount,
             paymentTypeName = payment.paymentType.name,
@@ -233,18 +243,27 @@ class WaterPaymentService(
 
         val bill = payment.waterBill
         val partner = payment.partner
-        val reading = bill.reading
+        val reading = bill?.reading
 
-        // Obtener conceptos de la factura
-        val concepts = billConceptItemRepository.findByWaterBillIdAndActive(bill.id, true)
-            .map { concept ->
-                BillConceptItemDto(
-                    id = concept.id,
-                    conceptName = concept.conceptName,
-                    assignedDate = concept.assignedDate,
-                    amount = concept.amount
-                )
-            }.toMutableList()
+        // Obtener conceptos de la factura (si hay)
+        val concepts = if (bill != null) {
+            billConceptItemRepository.findByWaterBillIdAndActive(bill.id, true)
+                .map { concept ->
+                    BillConceptItemDto(
+                        id = concept.id,
+                        conceptName = concept.conceptName,
+                        assignedDate = concept.assignedDate,
+                        amount = concept.amount
+                    )
+                }.toMutableList()
+        } else {
+            mutableListOf(BillConceptItemDto(
+                id = UUID.randomUUID(),
+                conceptName = "INSTALACIÓN DE AGUA",
+                assignedDate = payment.paymentDate,
+                amount = payment.amount
+            ))
+        }
 
         // Obtener multas pagadas en este recibo
         val paymentDetails = waterPaymentDetailRepository.findByWaterPaymentIdAndActive(paymentId, true)
@@ -270,14 +289,28 @@ class WaterPaymentService(
             payment.paymentDate.year
         )
 
-        // Obtener mes de pago del período de facturación
-        val paymentMonth = getMonthName(bill.billingPeriodStart.monthValue).uppercase()
-        val paymentMonthDate = String.format(
-            "%02d-%s-%d",
-            bill.billingPeriodEnd.dayOfMonth,
-            getMonthName(bill.billingPeriodEnd.monthValue),
-            bill.billingPeriodEnd.year
-        )
+        // Obtener mes de pago o descripción
+        val paymentMonth = if (bill != null) {
+            getMonthName(bill.billingPeriodStart.monthValue).uppercase()
+        } else {
+            "INSTALACIÓN"
+        }
+        
+        val paymentMonthDate = if (bill != null) {
+            String.format(
+                "%02d-%s-%d",
+                bill.billingPeriodEnd.dayOfMonth,
+                getMonthName(bill.billingPeriodEnd.monthValue),
+                bill.billingPeriodEnd.year
+            )
+        } else {
+            String.format(
+                "%02d-%s-%d",
+                payment.paymentDate.dayOfMonth,
+                getMonthName(payment.paymentDate.monthValue),
+                payment.paymentDate.year
+            )
+        }
 
         // Lecturas del medidor
         val currentReading = reading?.currentReading ?: BigDecimal.ZERO
@@ -507,8 +540,8 @@ class WaterPaymentService(
         
         return WaterPaymentOutputDto(
             id = entity.id,
-            waterBillId = entity.waterBill.id,
-            billNumber = entity.waterBill.billNumber,
+            waterBillId = entity.waterBill?.id,
+            billNumber = entity.waterBill?.billNumber,
             partnerId = entity.partner.id,
             partnerName = entity.partner.fullName,
             paymentDate = entity.paymentDate,

@@ -13,8 +13,10 @@ import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
 import org.springframework.data.domain.Sort
-import org.springframework.stereotype.Service
+import java.math.BigDecimal
 import java.time.LocalDate
+import java.util.*
+import org.springframework.stereotype.Service
 import java.time.OffsetDateTime
 import java.util.*
 
@@ -25,6 +27,7 @@ class PartnerService(
     private val waterBillRepository: WaterBillRepository,
     private val waterPaymentRepository: WaterPaymentRepository,
     private val debtManagementService: DebtManagementService,
+    private val waterPaymentService: WaterPaymentService,
 ) {
 
     fun findAll(): List<PartnerOutputDto> {
@@ -109,6 +112,24 @@ class PartnerService(
         partnerRepository.flush()
         // Recargar la entidad para obtener el partner_number generado
         val refreshedPartner = partnerRepository.findById(savedPartner.id).orElse(savedPartner)
+
+        // Registrar cobro de instalación si se proporciona
+        if (input.installationAmount != null && input.installationAmount > BigDecimal.ZERO) {
+            val paymentInput = WaterPaymentInputDto(
+                userId = input.userId ?: UUID.fromString("00000000-0000-0000-0000-000000000000"),
+                waterBillId = null,
+                partnerId = refreshedPartner.id,
+                paymentDate = input.connectionDate ?: LocalDate.now(),
+                amount = input.installationAmount,
+                paymentTypeId = input.paymentTypeId ?: UUID.randomUUID(),
+                cashBalanceId = input.cashBalanceId,
+                observation = "COBRO POR INSTALACIÓN DE AGUA",
+                includePendingFines = false
+            )
+            val paymentOutput = waterPaymentService.recordPayment(paymentInput)
+            return toPartnerOutputDto(refreshedPartner, paymentOutput.id)
+        }
+
         return toPartnerOutputDto(refreshedPartner)
     }
 
@@ -255,7 +276,7 @@ class PartnerService(
         return existingPartner.isPresent && (excludePartnerId == null || existingPartner.get().id != excludePartnerId)
     }
 
-    private fun toPartnerOutputDto(entity: PartnerEntity): PartnerOutputDto {
+    private fun toPartnerOutputDto(entity: PartnerEntity, lastPaymentId: UUID? = null): PartnerOutputDto {
         return PartnerOutputDto(
             id = entity.id,
             partnerNumber = entity.partnerNumber,
@@ -274,7 +295,8 @@ class PartnerService(
             notes = entity.notes,
             createdAt = entity.createdAt,
             updatedAt = entity.updatedAt,
-            active = entity.active
+            active = entity.active,
+            lastPaymentId = lastPaymentId
         )
     }
 }

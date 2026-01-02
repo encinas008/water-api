@@ -106,7 +106,7 @@ data class WaterBillSummaryDto(
 // Water Payment DTOs
 data class WaterPaymentInputDto(
     val userId: UUID,
-    val waterBillId: UUID,
+    val waterBillId: UUID?,
     val partnerId: UUID,
     val paymentDate: LocalDate,
     val amount: BigDecimal,
@@ -134,8 +134,8 @@ data class PaymentDetailDto(
 
 data class WaterPaymentOutputDto(
     val id: UUID,
-    val waterBillId: UUID,
-    val billNumber: String,
+    val waterBillId: UUID?,
+    val billNumber: String?,
     val partnerId: UUID,
     val partnerName: String,
     val paymentDate: LocalDate,

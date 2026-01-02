@@ -17,10 +17,10 @@ data class WaterPaymentEntity(
     @Column(name = "water_payment_id")
     var id: UUID = UUID.randomUUID(),
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "water_bill_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "water_bill_id")
     @OnDelete(action = OnDeleteAction.CASCADE)
-    var waterBill: WaterBillEntity,
+    var waterBill: WaterBillEntity? = null,
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "partner_id", nullable = false)

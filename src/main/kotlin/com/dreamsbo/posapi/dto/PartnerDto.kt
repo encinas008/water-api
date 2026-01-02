@@ -23,7 +23,8 @@ data class PartnerOutputDto(
     val notes: String?,
     val active: Boolean,
     val createdAt: OffsetDateTime,
-    val updatedAt: OffsetDateTime?
+    val updatedAt: OffsetDateTime?,
+    val lastPaymentId: UUID? = null
 )
 
 data class PartnerInputDto(
@@ -37,7 +38,11 @@ data class PartnerInputDto(
     val connectionDate: LocalDate? = null,
     val waterConnectionAddress: String? = null,
     val isElderly: Boolean = false,
-    val notes: String = ""
+    val notes: String = "",
+    val installationAmount: BigDecimal = BigDecimal.ZERO,
+    val paymentTypeId: UUID? = null,
+    val cashBalanceId: UUID? = null,
+    val userId: UUID? = null,
 )
 
 data class PartnerUpdateDto(
