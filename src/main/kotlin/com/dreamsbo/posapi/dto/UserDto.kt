@@ -50,6 +50,7 @@ data class UpdateUserInputDto(
     val username: String,
     val password: String,
     val profile: ProfileInputDto,
+    val role: String?,
     val checkUniqueFields: UniqueFieldsDto
 )
 
@@ -57,6 +58,6 @@ data class UserOutputDto(val username: String, val profileId: UUID, val roleId: 
 
 data class UpdateUserOutputDto(val profileId: UUID)
 
-data class UserDetailsOutputDto(val username: String, val profile: ProfileOutputDto)
+data class UserDetailsOutputDto(val id: UUID, val username: String, val profile: ProfileOutputDto, val role: RoleOutputDto?)
 
 data class UpdateUserStatusInputDto(val active: Boolean)

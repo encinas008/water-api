@@ -14,4 +14,6 @@ interface UserRoleRepository : JpaRepository<UserRoleEntity, UUID> {
     fun findAllUsersByRoleName(
         @Param("roleName") roleName: String,
     ): List<UserRoleEntity>
+
+    fun findByUserId(userId: UUID): List<UserRoleEntity>
 }

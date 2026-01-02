@@ -169,7 +169,16 @@ class UserService(
                 occupation = it.profile.occupation
             )
 
-            UserDetailsOutputDto(it.username, profile)
+            val roleDto = it.userRole?.firstOrNull()?.let { userRole ->
+                RoleOutputDto(
+                    id = userRole.role.id,
+                    name = userRole.role.name,
+                    description = userRole.role.description,
+                    code = userRole.role.code
+                )
+            }
+
+            UserDetailsOutputDto(it.id, it.username, profile, roleDto)
         }.orElseThrow {
 
             NotFoundEntityException("Has not been found user. UserId = $userId")
@@ -198,7 +207,16 @@ class UserService(
                 occupation = it.profile.occupation
             )
 
-            UserDetailsOutputDto(it.username, profile)
+            val roleDto = it.userRole?.firstOrNull()?.let { userRole ->
+                RoleOutputDto(
+                    id = userRole.role.id,
+                    name = userRole.role.name,
+                    description = userRole.role.description,
+                    code = userRole.role.code
+                )
+            }
+
+            UserDetailsOutputDto(it.id, it.username, profile, roleDto)
         }
     }
 
@@ -265,7 +283,28 @@ class UserService(
         userToBeUpdated.profile.city = city.get()
         userToBeUpdated.profile.gender = gender.get()
         userToBeUpdated.profile.civilStatus = civilStatus.get()
+        userToBeUpdated.profile.civilStatus = civilStatus.get()
         userToBeUpdated.username = userInputDto.username
+
+        // Update Role
+        if (userInputDto.role != null) {
+             val roleEntity = roleRepository.findByNameAndActive(userInputDto.role, true)
+                .orElseThrow { NotFoundEntityException("Rol no encontrado: ${userInputDto.role}") }
+
+             val userRoles = userRoleRepository.findByUserId(userId)
+             if (userRoles.isNotEmpty()) {
+                 val userRole = userRoles[0]
+                 userRoleRepository.delete(userRole)
+                 if (userRoles.size > 1) {
+                     for (i in 1 until userRoles.size) {
+                        userRoleRepository.delete(userRoles[i])
+                     }
+                 }
+             }
+             userRoleRepository.save(UserRoleEntity(user = userToBeUpdated, role = roleEntity))
+        }
+
+
         userToBeUpdated.updatedAt = OffsetDateTime.now()
 
         val updatedProfile = profileRepository.save(userToBeUpdated.profile)
