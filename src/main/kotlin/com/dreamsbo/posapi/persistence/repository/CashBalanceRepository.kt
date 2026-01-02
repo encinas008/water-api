@@ -36,6 +36,8 @@ interface CashBalanceRepository : JpaRepository<CashBalanceEntity, UUID> {
     
     fun findAllByActive(active: Boolean, pageable: Pageable): Page<CashBalanceEntity>
     
+    fun findAllByActiveAndBoxUserId(active: Boolean, userId: UUID, pageable: Pageable): Page<CashBalanceEntity>
+    
     @Query("""
         SELECT c FROM CashBalanceEntity c 
         WHERE c.active = :active 
@@ -48,6 +50,23 @@ interface CashBalanceRepository : JpaRepository<CashBalanceEntity, UUID> {
     fun findAllByActiveAndSearch(
         @Param("active") active: Boolean,
         @Param("search") search: String,
+        pageable: Pageable
+    ): Page<CashBalanceEntity>
+
+    @Query("""
+        SELECT c FROM CashBalanceEntity c 
+        WHERE c.active = :active 
+        AND c.box.user.id = :userId
+        AND (
+            LOWER(c.description) LIKE LOWER(CONCAT('%', :search, '%')) OR
+            LOWER(CONCAT(c.box.user.profile.name, ' ', c.box.user.profile.lastname)) LIKE LOWER(CONCAT('%', :search, '%'))
+        )
+        ORDER BY c.openTime DESC
+    """)
+    fun findAllByActiveAndSearchAndBoxUserId(
+        @Param("active") active: Boolean,
+        @Param("search") search: String,
+        @Param("userId") userId: UUID,
         pageable: Pageable
     ): Page<CashBalanceEntity>
 }

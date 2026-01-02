@@ -289,13 +289,21 @@ class CashBalanceService(
         return cashBalances
     }
 
-    fun findAllPaginated(page: Int, size: Int, search: String?): Page<CashBalanceOutputDto> {
+    fun findAllPaginated(page: Int, size: Int, search: String?, userId: UUID?): Page<CashBalanceOutputDto> {
         val pageable: Pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "openTime"))
         
         val balancePage = if (search.isNullOrBlank()) {
-            cashBalanceRepository.findAllByActive(true, pageable)
+            if (userId != null) {
+                cashBalanceRepository.findAllByActiveAndBoxUserId(true, userId, pageable)
+            } else {
+                cashBalanceRepository.findAllByActive(true, pageable)
+            }
         } else {
-            cashBalanceRepository.findAllByActiveAndSearch(true, search.trim(), pageable)
+            if (userId != null) {
+                cashBalanceRepository.findAllByActiveAndSearchAndBoxUserId(true, search.trim(), userId, pageable)
+            } else {
+                cashBalanceRepository.findAllByActiveAndSearch(true, search.trim(), pageable)
+            }
         }
         
         return balancePage.map { entity ->

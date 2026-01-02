@@ -60,8 +60,9 @@ class CashBalanceController(
     fun getAllCashBalances(
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "20") size: Int,
-        @RequestParam(required = false) search: String?
+        @RequestParam(required = false) search: String?,
+        @RequestParam(required = false) userId: UUID?
     ): Page<CashBalanceOutputDto> {
-        return cashBalanceService.findAllPaginated(page, size, search)
+        return cashBalanceService.findAllPaginated(page, size, search, userId)
     }
 }
