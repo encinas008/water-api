@@ -9,6 +9,7 @@ import com.dreamsbo.posapi.persistence.entity.ImageEntity
 import com.dreamsbo.posapi.persistence.entity.ProfileEntity
 import com.dreamsbo.posapi.persistence.entity.UserEntity
 import com.dreamsbo.posapi.persistence.entity.UserRoleEntity
+import com.dreamsbo.posapi.persistence.entity.BoxEntity
 import com.dreamsbo.posapi.persistence.repository.*
 import com.dreamsbo.posapi.security.SecurityApplicationProperty
 import com.dreamsbo.posapi.security.service.JwtService
@@ -38,6 +39,7 @@ class UserService(
     val civilStatusTypeRepository: CivilStatusTypeRepository,
     val imageRepository: ImageRepository,
     val securityApplicationProperty: SecurityApplicationProperty,
+    val boxRepository: BoxRepository,
 ) {
 
     fun create(userInputDto: UserInputDto): UserOutputDto {
@@ -108,6 +110,16 @@ class UserService(
 
         val userRoleCreated =
             userRoleRepository.save(UserRoleEntity(user = userCreated, role = role))
+
+        if (role.name.uppercase() == "ADMINISTRADOR" || role.name.uppercase() == "CAJERO") {
+            boxRepository.save(
+                BoxEntity(
+                    name = "CAJA PRINCIPAL",
+                    description = "Caja creada automáticamente para el usuario ${userCreated.username}",
+                    user = userCreated
+                )
+            )
+        }
 
         return UserOutputDto(
             username = userCreated.username,
