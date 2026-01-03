@@ -30,6 +30,27 @@ interface JobRepository : JpaRepository<JobEntity, UUID> {
         @Param("search") search: String,
         pageable: Pageable
     ): Page<JobEntity>
+
+    fun findAllByActiveAndStartDate(active: Boolean, startDate: java.time.LocalDate, pageable: Pageable): Page<JobEntity>
+
+    @Query("""
+        SELECT j FROM JobEntity j 
+        WHERE j.active = :active 
+        AND j.startDate = :startDate
+        AND (
+            LOWER(j.name) LIKE LOWER(CONCAT('%', :search, '%')) OR
+            LOWER(j.description) LIKE LOWER(CONCAT('%', :search, '%'))
+        )
+    """)
+    fun findAllByActiveAndSearchAndStartDate(
+        @Param("active") active: Boolean,
+        @Param("search") search: String,
+        @Param("startDate") startDate: java.time.LocalDate,
+        pageable: Pageable
+    ): Page<JobEntity>
+
+    @Query("SELECT DISTINCT j.startDate FROM JobEntity j WHERE j.active = :active")
+    fun findDistinctStartDatesByActive(@Param("active") active: Boolean): List<java.time.LocalDate>
 }
 
 

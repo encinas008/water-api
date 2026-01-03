@@ -32,13 +32,26 @@ class MeetingService(
             .map { toMeetingOutputDto(it) }
     }
 
-    fun findAllPaginated(page: Int, size: Int, search: String?): Page<MeetingOutputDto> {
+    fun getScheduledDates(): List<String> {
+        return meetingRepository.findDistinctMeetingDatesByActive(true).map { it.toString() }
+    }
+
+    fun findAllPaginated(page: Int, size: Int, search: String?, date: java.time.LocalDate? = null): Page<MeetingOutputDto> {
         val pageable: Pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"))
         
-        val meetingPage = if (search.isNullOrBlank()) {
-            meetingRepository.findAllByActive(true, pageable)
-        } else {
-            meetingRepository.findAllByActiveAndSearch(true, search.trim(), pageable)
+        val meetingPage = when {
+            !search.isNullOrBlank() && date != null -> {
+                meetingRepository.findAllByActiveAndSearchAndMeetingDate(true, search.trim(), date, pageable)
+            }
+            !search.isNullOrBlank() -> {
+                meetingRepository.findAllByActiveAndSearch(true, search.trim(), pageable)
+            }
+            date != null -> {
+                meetingRepository.findAllByActiveAndMeetingDate(true, date, pageable)
+            }
+            else -> {
+                meetingRepository.findAllByActive(true, pageable)
+            }
         }
         
         return meetingPage.map { toMeetingOutputDto(it) }

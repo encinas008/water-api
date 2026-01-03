@@ -19,9 +19,15 @@ class MeetingController(
     fun getAll(
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "20") size: Int,
-        @RequestParam(required = false) search: String?
+        @RequestParam(required = false) search: String?,
+        @RequestParam(required = false) date: java.time.LocalDate?
     ): Page<MeetingOutputDto> {
-        return meetingService.findAllPaginated(page, size, search)
+        return meetingService.findAllPaginated(page, size, search, date)
+    }
+
+    @GetMapping("/scheduled-dates")
+    fun getScheduledDates(): List<String> {
+        return meetingService.getScheduledDates()
     }
 
     @GetMapping("/{id}")

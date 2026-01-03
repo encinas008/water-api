@@ -30,6 +30,27 @@ interface MeetingRepository : JpaRepository<MeetingEntity, UUID> {
         @Param("search") search: String,
         pageable: Pageable
     ): Page<MeetingEntity>
+
+    fun findAllByActiveAndMeetingDate(active: Boolean, meetingDate: java.time.LocalDate, pageable: Pageable): Page<MeetingEntity>
+
+    @Query("""
+        SELECT m FROM MeetingEntity m 
+        WHERE m.active = :active 
+        AND m.meetingDate = :meetingDate
+        AND (
+            LOWER(m.name) LIKE LOWER(CONCAT('%', :search, '%')) OR
+            LOWER(m.description) LIKE LOWER(CONCAT('%', :search, '%'))
+        )
+    """)
+    fun findAllByActiveAndSearchAndMeetingDate(
+        @Param("active") active: Boolean,
+        @Param("search") search: String,
+        @Param("meetingDate") meetingDate: java.time.LocalDate,
+        pageable: Pageable
+    ): Page<MeetingEntity>
+
+    @Query("SELECT DISTINCT m.meetingDate FROM MeetingEntity m WHERE m.active = :active")
+    fun findDistinctMeetingDatesByActive(@Param("active") active: Boolean): List<java.time.LocalDate>
 }
 
 

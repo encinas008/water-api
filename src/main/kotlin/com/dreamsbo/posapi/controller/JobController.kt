@@ -17,9 +17,15 @@ class JobController(
     fun getAll(
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "20") size: Int,
-        @RequestParam(required = false) search: String?
+        @RequestParam(required = false) search: String?,
+        @RequestParam(required = false) date: java.time.LocalDate?
     ): Page<JobOutputDto> {
-        return jobService.findAllPaginated(page, size, search)
+        return jobService.findAllPaginated(page, size, search, date)
+    }
+
+    @GetMapping("/scheduled-dates")
+    fun getScheduledDates(): List<String> {
+        return jobService.getScheduledDates()
     }
 
     @GetMapping("/{id}")

@@ -30,13 +30,26 @@ class JobService(
         return jobs
     }
 
-    fun findAllPaginated(page: Int, size: Int, search: String?): Page<JobOutputDto> {
+    fun getScheduledDates(): List<String> {
+        return jobRepository.findDistinctStartDatesByActive(true).map { it.toString() }
+    }
+
+    fun findAllPaginated(page: Int, size: Int, search: String?, date: java.time.LocalDate? = null): Page<JobOutputDto> {
         val pageable: Pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"))
         
-        val jobPage = if (search.isNullOrBlank()) {
-            jobRepository.findAllByActive(true, pageable)
-        } else {
-            jobRepository.findAllByActiveAndSearch(true, search.trim(), pageable)
+        val jobPage = when {
+            !search.isNullOrBlank() && date != null -> {
+                jobRepository.findAllByActiveAndSearchAndStartDate(true, search.trim(), date, pageable)
+            }
+            !search.isNullOrBlank() -> {
+                jobRepository.findAllByActiveAndSearch(true, search.trim(), pageable)
+            }
+            date != null -> {
+                jobRepository.findAllByActiveAndStartDate(true, date, pageable)
+            }
+            else -> {
+                jobRepository.findAllByActive(true, pageable)
+            }
         }
         
         return jobPage.map { toJobOutputDto(it) }
