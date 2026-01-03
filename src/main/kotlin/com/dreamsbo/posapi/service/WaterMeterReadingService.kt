@@ -25,6 +25,8 @@ class WaterMeterReadingService(
     private val imageRepository: ImageRepository,
     private val userRepository: UserRepository,
     private val waterBillingService: WaterBillingService,
+    private val waterBillRepository: WaterBillRepository,
+    private val billConceptItemRepository: BillConceptItemRepository,
 ) {
 
     @Transactional
@@ -152,6 +154,41 @@ class WaterMeterReadingService(
 
         val updatedReading = waterMeterReadingRepository.save(reading)
         return toWaterMeterReadingOutputDto(updatedReading)
+    }
+
+    @Transactional
+    fun deleteReading(id: UUID) {
+        val reading = waterMeterReadingRepository.findById(id)
+            .orElseThrow { NotFoundEntityException("No se ha encontrado la lectura. ReadingId = $id") }
+
+        // Buscar si existe una factura activa para esta lectura
+        val bill = waterBillRepository.findAll().firstOrNull { it.reading?.id == id && it.active }
+        
+        if (bill != null) {
+            // Si la factura está pagada, no se puede eliminar la lectura
+            if (bill.status.code == "PAID") {
+                throw BadRequestException("No se puede eliminar la lectura porque tiene una factura pagada (Nº ${bill.billNumber}). Por favor anule el pago primero.")
+            }
+            
+            // Si la factura está pendiente o vencida, se debe eliminar
+            // 1. Eliminar conceptos de la factura
+            val concepts = billConceptItemRepository.findByWaterBillIdAndActive(bill.id, true)
+            concepts.forEach { it.active = false }
+            billConceptItemRepository.saveAll(concepts)
+            
+            // 2. Desactivar la factura
+            bill.active = false
+            waterBillRepository.save(bill)
+            
+            // 3. Reversar la deuda del socio
+            val partner = reading.partner
+            partner.currentDebt = partner.currentDebt.subtract(bill.totalAmount)
+            partnerRepository.save(partner)
+        }
+
+        // Desactivar la lectura
+        reading.active = false
+        waterMeterReadingRepository.save(reading)
     }
 
     fun validateReading(partnerId: UUID, currentReading: BigDecimal): Boolean {

@@ -38,6 +38,11 @@ class CashBalanceController(
         return cashBalanceService.findLastCashBalanceByUser(userId)
     }
 
+    @GetMapping("/all-open")
+    fun getAllOpenCashBalances(): List<CashBalanceOutputDto> {
+        return cashBalanceService.findAllOpenCashBalances()
+    }
+
     @PostMapping
     fun createCashBalance(@RequestBody cashBalanceInputDto: CashBalanceInputDto): CashBalanceOutputDto {
 

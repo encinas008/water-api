@@ -87,14 +87,18 @@ class CashFlowService(
             throw BadRequestException("Tipo de pago no encontrado por Id. CashFlowTypeId = ${cashFlowInputDto.cashFlowTypeId}")
         }
 
-        val boxOptional = boxRepository.findByUserId(cashFlowInputDto.userId, true)
-        if (boxOptional.isEmpty) {
-            throw BadRequestException("Caja no encontrada para el usuario. BoxId = ${cashFlowInputDto.userId}")
+        val cashBalance = if (cashFlowInputDto.cashBalanceId != null) {
+            cashBalanceRepository.findById(cashFlowInputDto.cashBalanceId)
+        } else {
+            val boxOptional = boxRepository.findByUserId(cashFlowInputDto.userId, true)
+            if (boxOptional.isEmpty) {
+                throw BadRequestException("Caja no encontrada para el usuario. UserId = ${cashFlowInputDto.userId}")
+            }
+            cashBalanceRepository.findOpenBoxForUser(boxOptional.get().id)
         }
 
-        val cashBalance = cashBalanceRepository.findOpenBoxForUser(boxOptional.get().id)
         if (cashBalance.isEmpty) {
-            throw BadRequestException("No existe ninguna arqueo de cajas")
+            throw BadRequestException("No existe ninguna arqueo de caja abierto para la operación")
         }
 
         if (cashFlowTypeOptional.get().name == "EGRESO") {

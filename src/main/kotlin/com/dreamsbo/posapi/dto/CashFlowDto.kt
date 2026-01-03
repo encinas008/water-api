@@ -10,6 +10,7 @@ data class CashFlowInputDto(
     val amount: BigDecimal,
     val description: String,
     val userId: UUID,
+    val cashBalanceId: UUID? = null,
 )
 
 data class CashFlowOutputDto(

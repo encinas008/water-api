@@ -68,4 +68,12 @@ class WaterBillingController(
     fun getBillStats(): com.dreamsbo.posapi.dto.WaterBillStatsDto {
         return waterBillingService.getBillStats()
     }
+
+    @PostMapping("/{id}/cancel")
+    fun cancelBill(
+        @PathVariable id: UUID,
+        @RequestParam userId: UUID
+    ): WaterBillOutputDto {
+        return waterBillingService.cancelBill(id, userId)
+    }
 }

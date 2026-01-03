@@ -21,6 +21,7 @@ import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
 import java.math.BigDecimal
 import java.time.LocalDate
+import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import java.util.*
 
@@ -35,6 +36,8 @@ class WaterBillingService(
     private val waterPaymentService: com.dreamsbo.posapi.service.WaterPaymentService,
     private val waterPaymentDetailRepository: com.dreamsbo.posapi.persistence.repository.WaterPaymentDetailRepository,
     private val monthlyPendingFinesService: MonthlyPendingFinesService,
+    private val cashFlowService: CashFlowService,
+    private val cashFlowTypeRepository: CashFlowTypeRepository,
 ) {
 
     @Transactional
@@ -553,6 +556,91 @@ class WaterBillingService(
             dueDate = entity.dueDate,
             isOverdue = isOverdue
         )
+    }
+
+    @Transactional
+    fun cancelBill(id: UUID, userId: UUID): WaterBillOutputDto {
+        val bill = waterBillRepository.findById(id)
+            .orElseThrow { NotFoundEntityException("No se ha encontrado la factura. BillId = $id") }
+
+        if (bill.status.code == "CANCELLED") {
+            throw BadRequestException("La factura ya se encuentra anulada")
+        }
+
+        val cancelledStatus = billStatusTypeRepository.findByCodeAndActive("CANCELLED", true)
+            .orElseThrow { NotFoundEntityException("Estado CANCELLED no encontrado") }
+
+        // 1. Manejar devoluciones si hay pagos realizados
+        val payments = waterPaymentRepository.findByWaterBillIdAndActive(bill.id, true)
+        var totalReversedAmount = BigDecimal.ZERO
+
+        if (payments.isNotEmpty()) {
+            payments.forEach { payment ->
+                totalReversedAmount = totalReversedAmount.add(payment.amount)
+                
+                // Si el pago fue en EFECTIVO, registrar un retiro en caja
+                if (payment.paymentType.name == "EFECTIVO") {
+                    try {
+                        val egresoType = cashFlowTypeRepository.findByNameAndActive("EGRESO", true)
+                            .orElseThrow { BadRequestException("Tipo de flujo EGRESO no encontrado") }
+                        
+                        val efectivoType = payment.paymentType
+
+                        cashFlowService.create(com.dreamsbo.posapi.dto.CashFlowInputDto(
+                            amount = payment.amount,
+                            description = "Devolución por anulación de factura ${bill.billNumber}",
+                            userId = userId,
+                            cashFlowTypeId = egresoType.id,
+                            paymentTypeId = efectivoType.id
+                        ))
+                    } catch (e: Exception) {
+                        if (e is BadRequestException) throw e
+                        throw BadRequestException("Error al registrar el egreso en caja: ${e.message}")
+                    }
+                }
+
+                // Desactivar el pago
+                payment.active = false
+                waterPaymentRepository.save(payment)
+                
+                // Desactivar detalles del pago (esto hace que las multas vuelvan a estar "pendientes" en MonthlyPendingFinesService)
+                val details = waterPaymentDetailRepository.findByWaterPaymentIdAndActive(payment.id, true)
+                details.forEach { it.active = false }
+                waterPaymentDetailRepository.saveAll(details)
+            }
+        }
+
+        // 2. Actualizar estado de la factura
+        bill.status = cancelledStatus
+        bill.updatedAt = OffsetDateTime.now()
+        bill.remainingBalance = bill.totalAmount // Restaurar saldo original para consistencia conceptual
+        val savedBill = waterBillRepository.save(bill)
+
+        // 3. Revertir impacto en la deuda del socio
+        // Si estaba pagada, la deuda subió cuando se generó la factura y bajó cuando se pagó.
+        // Al anular: 
+        // - Si estaba pendiente: Restamos el total de la factura de la deuda actual.
+        // - Si estaba pagada: Ya se restó el pago de la deuda. Al devolver el dinero (retiro), el socio "recupera" su dinero.
+        //   Pero conceptualmente, si anulamos la factura, el socio ya no debe ese monto.
+        
+        // Lógica correcta de deuda al ANULAR:
+        // La deuda actual del socio tiene en cuenta facturas pendientes y pagos.
+        // Saldo Deuda = Sum(Facturas Pendientes) + Sum(Multas Pendientes)
+        
+        val partner = bill.partner
+        // Restar el monto que aún figuraba como "pendiente" en la factura
+        // Si ya estaba pagada, bill.remainingBalance era 0 (antes de restaurarlo arriba)
+        // Pero usamos el valor ANTES de restaurarlo o calculamos el impacto real.
+        
+        // Impacto real en deuda = totalAmount - totalPagado
+        // La deuda del socio incluye el remainingBalance de todas sus facturas activas.
+        // Al anularla, debemos restar su pending balance de la deuda total.
+        
+        val currentBillPending = bill.totalAmount.subtract(totalReversedAmount)
+        partner.currentDebt = partner.currentDebt.subtract(currentBillPending)
+        partnerRepository.save(partner)
+
+        return toWaterBillOutputDto(savedBill)
     }
 
     private fun getMonthName(month: Int): String {

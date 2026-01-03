@@ -59,4 +59,10 @@ class WaterMeterReadingController(
     ): List<WaterMeterReadingOutputDto> {
         return waterMeterReadingService.getReadingsByPeriod(startDate, endDate)
     }
+
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    fun delete(@PathVariable id: UUID) {
+        waterMeterReadingService.deleteReading(id)
+    }
 }

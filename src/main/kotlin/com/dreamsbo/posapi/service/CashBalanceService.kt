@@ -267,10 +267,10 @@ class CashBalanceService(
         return cashBalances
     }
 
-    fun findAllActiveCashBalances(): List<CashBalanceOutputDto> {
+    fun findAllOpenCashBalances(): List<CashBalanceOutputDto> {
         val cashBalances = mutableListOf<CashBalanceOutputDto>()
 
-        cashBalanceRepository.findAllActiveCashBalances().forEach {
+        cashBalanceRepository.findAllOpenCashBalances().forEach {
             cashBalances.add(
                 CashBalanceOutputDto(
                     id = it.id,
