@@ -20,6 +20,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.userdetails.UsernameNotFoundException
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import java.time.OffsetDateTime
 import java.util.*
 
@@ -42,6 +43,7 @@ class UserService(
     val boxRepository: BoxRepository,
 ) {
 
+    @Transactional
     fun create(userInputDto: UserInputDto): UserOutputDto {
 
         val country = countryRepository.findById(userInputDto.profile.countryId)
@@ -76,8 +78,8 @@ class UserService(
 
         val profileToSave = ProfileEntity(
             dni = userInputDto.profile.dni,
-            name = userInputDto.profile.name,
-            lastname = userInputDto.profile.lastname,
+            name = userInputDto.profile.name.uppercase(),
+            lastname = userInputDto.profile.lastname.uppercase(),
             email = userInputDto.profile.email,
             cellphone = userInputDto.profile.cellphone,
             telephone = userInputDto.profile.telephone,
@@ -190,7 +192,7 @@ class UserService(
                 )
             }
 
-            UserDetailsOutputDto(it.id, it.username, profile, roleDto)
+            UserDetailsOutputDto(it.id, it.username, profile, roleDto, it.active)
         }.orElseThrow {
 
             NotFoundEntityException("Has not been found user. UserId = $userId")
@@ -228,10 +230,11 @@ class UserService(
                 )
             }
 
-            UserDetailsOutputDto(it.id, it.username, profile, roleDto)
+            UserDetailsOutputDto(it.id, it.username, profile, roleDto, it.active)
         }
     }
 
+    @Transactional
     fun update(userId: UUID, userInputDto: UpdateUserInputDto): UpdateUserOutputDto {
 
         val country = countryRepository.findById(userInputDto.profile.countryId)
@@ -283,8 +286,8 @@ class UserService(
         }
 
         userToBeUpdated.profile.dni = userInputDto.profile.dni
-        userToBeUpdated.profile.name = userInputDto.profile.name
-        userToBeUpdated.profile.lastname = userInputDto.profile.lastname
+        userToBeUpdated.profile.name = userInputDto.profile.name.uppercase()
+        userToBeUpdated.profile.lastname = userInputDto.profile.lastname.uppercase()
         userToBeUpdated.profile.email = userInputDto.profile.email
         userToBeUpdated.profile.cellphone = userInputDto.profile.cellphone
         userToBeUpdated.profile.telephone = userInputDto.profile.telephone
@@ -337,6 +340,7 @@ class UserService(
         )
     }
 
+    @Transactional
     fun updateStatus(userId: UUID, userStatus: UpdateUserStatusInputDto): UpdateUserOutputDto {
 
         val user = userRepository.findById(userId).orElseThrow {

@@ -58,6 +58,6 @@ data class UserOutputDto(val username: String, val profileId: UUID, val roleId: 
 
 data class UpdateUserOutputDto(val profileId: UUID)
 
-data class UserDetailsOutputDto(val id: UUID, val username: String, val profile: ProfileOutputDto, val role: RoleOutputDto?)
+data class UserDetailsOutputDto(val id: UUID, val username: String, val profile: ProfileOutputDto, val role: RoleOutputDto?, val active: Boolean)
 
 data class UpdateUserStatusInputDto(val active: Boolean)
