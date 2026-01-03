@@ -37,6 +37,8 @@ data class CashFromCashFlowsDetails(
     val cashQrIn: BigDecimal,
     val cashTransferIn: BigDecimal,
     val cashOut: BigDecimal,
+    val cashQrOut: BigDecimal,
+    val cashTransferOut: BigDecimal,
 )
 
 data class CashBalanceDetails(

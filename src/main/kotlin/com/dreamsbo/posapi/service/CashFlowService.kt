@@ -54,10 +54,10 @@ class CashFlowService(
     }
 
     fun findWithdrawalsByCashBalanceId(cashBalanceId: UUID): List<CashFlowOutputDto> {
-        val cashFlows = cashFlowRepository.findByCashBalanceId(cashBalanceId)
+        val cashFlows = cashFlowRepository.findByCashBalanceIdAndActive(cashBalanceId, true)
         
         return cashFlows
-            .filter { it.cashFlowType.name == "EGRESO" && it.active }
+            .filter { it.cashFlowType.name == "EGRESO" }
             .sortedByDescending { it.createdAt }
             .map {
                 CashFlowOutputDto(
@@ -160,17 +160,19 @@ class CashFlowService(
     }
 
     private fun getCurrentCashInCashFlows(cashBalanceId: UUID): BigDecimal {
+        val cashFlows = cashFlowRepository.findByCashBalanceIdAndActive(cashBalanceId, true)
 
-        val cashFlows = cashFlowRepository.findByCashBalanceId(cashBalanceId)
-
-        // Filtrar solo INGRESOS en efectivo (no EGRESOS)
-        var cashFromCashFlows = BigDecimal(0)
+        var balance = BigDecimal.ZERO
         cashFlows.forEach {
-            if (it.cashFlowType.name == "INGRESO" && it.paymentType.name == "EFECTIVO") {
-                cashFromCashFlows = cashFromCashFlows.plus(it.amount)
+            if (it.paymentType.name == "EFECTIVO") {
+                if (it.cashFlowType.name == "INGRESO") {
+                    balance = balance.add(it.amount)
+                } else if (it.cashFlowType.name == "EGRESO") {
+                    balance = balance.subtract(it.amount)
+                }
             }
         }
 
-        return cashFromCashFlows
+        return balance
     }
 }

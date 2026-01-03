@@ -614,9 +614,15 @@ class WaterBillingService(
         bill.status = cancelledStatus
         bill.updatedAt = OffsetDateTime.now()
         bill.remainingBalance = bill.totalAmount // Restaurar saldo original para consistencia conceptual
+        
+        // 3. Desactivar conceptos de la factura para que no aparezcan en reportes de conceptos activos
+        val concepts = billConceptItemRepository.findByWaterBillIdAndActive(bill.id, true)
+        concepts.forEach { it.active = false }
+        billConceptItemRepository.saveAll(concepts)
+
         val savedBill = waterBillRepository.save(bill)
 
-        // 3. Revertir impacto en la deuda del socio
+        // 4. Revertir impacto en la deuda del socio
         // Si estaba pagada, la deuda subió cuando se generó la factura y bajó cuando se pagó.
         // Al anular: 
         // - Si estaba pendiente: Restamos el total de la factura de la deuda actual.

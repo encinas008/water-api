@@ -19,5 +19,7 @@ interface CashFlowRepository : JpaRepository<CashFlowEntity, UUID> {
 
     fun findByCashBalanceIdAndPaymentTypeName(cashBalanceId: UUID, paymentTypeName: String): List<CashFlowEntity>
 
+    fun findByCashBalanceIdAndActive(cashBalanceId: UUID, active: Boolean): List<CashFlowEntity>
+
     fun findByCashBalanceId(cashBalanceId: UUID): List<CashFlowEntity>
 }

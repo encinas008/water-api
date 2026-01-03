@@ -163,21 +163,21 @@ class CashBalanceService(
     private fun cashFromSales(cashBalanceId: UUID): CashFromSaleDetails {
         val payments = waterPaymentRepository.findByCashBalanceId(cashBalanceId, true)
 
-        val paymentsByType = payments.groupBy { it.paymentType.name }
+        val paymentsByType = payments.groupBy { it.paymentType.name.trim().uppercase() }
 
-        var cashFromPayments = BigDecimal(0)
+        var cashFromPayments = BigDecimal.ZERO
         paymentsByType["EFECTIVO"]?.forEach {
-            cashFromPayments = cashFromPayments.plus(it.amount)
+            cashFromPayments = cashFromPayments.add(it.amount)
         }
 
-        var cashFromQr = BigDecimal(0)
+        var cashFromQr = BigDecimal.ZERO
         paymentsByType["QR"]?.forEach {
-            cashFromQr = cashFromQr.plus(it.amount)
+            cashFromQr = cashFromQr.add(it.amount)
         }
 
-        var cashFromTransfer = BigDecimal(0)
+        var cashFromTransfer = BigDecimal.ZERO
         paymentsByType["TRANSFERENCIA"]?.forEach {
-            cashFromTransfer = cashFromTransfer.plus(it.amount)
+            cashFromTransfer = cashFromTransfer.add(it.amount)
         }
 
         return CashFromSaleDetails(
@@ -188,40 +188,41 @@ class CashBalanceService(
     }
 
     private fun cashFromCashFlows(cashBalanceId: UUID): CashFromCashFlowsDetails {
+        val cashFlows = cashFlowRepository.findByCashBalanceIdAndActive(cashBalanceId, true)
 
-        val cashFlows = cashFlowRepository.findByCashBalanceId(cashBalanceId)
+        val cashByCashFlowType = cashFlows.groupBy { it.cashFlowType.name.trim().uppercase() }
 
-        val cashByCashFlowType = cashFlows.groupBy { it.cashFlowType.name }
-
-        var cashIn = BigDecimal(0)
-        var cashQrIn = BigDecimal(0)
-        var cashTransferIn = BigDecimal(0)
+        var cashIn = BigDecimal.ZERO
+        var cashQrIn = BigDecimal.ZERO
+        var cashTransferIn = BigDecimal.ZERO
+        
         cashByCashFlowType["INGRESO"]?.forEach {
-
-            if (it.paymentType.name == "EFECTIVO") {
-                cashIn = cashIn.plus(it.amount)
-            }
-
-            if (it.paymentType.name == "QR") {
-                cashQrIn = cashQrIn.plus(it.amount)
-            }
-
-            if (it.paymentType.name == "TRANSFERENCIA") {
-                cashTransferIn = cashTransferIn.plus(it.amount)
+            when (it.paymentType.name.trim().uppercase()) {
+                "EFECTIVO" -> cashIn = cashIn.add(it.amount)
+                "QR" -> cashQrIn = cashQrIn.add(it.amount)
+                "TRANSFERENCIA" -> cashTransferIn = cashTransferIn.add(it.amount)
             }
         }
 
-
-        var cashOut = BigDecimal(0)
+        var cashOut = BigDecimal.ZERO
+        var cashQrOut = BigDecimal.ZERO
+        var cashTransferOut = BigDecimal.ZERO
+        
         cashByCashFlowType["EGRESO"]?.forEach {
-            cashOut = cashOut.plus(it.amount)
+            when (it.paymentType.name.trim().uppercase()) {
+                "EFECTIVO" -> cashOut = cashOut.add(it.amount)
+                "QR" -> cashQrOut = cashQrOut.add(it.amount)
+                "TRANSFERENCIA" -> cashTransferOut = cashTransferOut.add(it.amount)
+            }
         }
 
         return CashFromCashFlowsDetails(
             cashIn = cashIn,
             cashQrIn = cashQrIn,
             cashTransferIn = cashTransferIn,
-            cashOut = cashOut
+            cashOut = cashOut,
+            cashQrOut = cashQrOut,
+            cashTransferOut = cashTransferOut
         )
     }
 
@@ -231,15 +232,18 @@ class CashBalanceService(
         initialMoney: BigDecimal
     ): CashBalanceDetails {
 
+        val netCash = initialMoney.add(cashFromSales.cash).add(cashFromCashFlows.cashIn).subtract(cashFromCashFlows.cashOut)
+        val netOthers = cashFromSales.qr.add(cashFromSales.transference)
+            .add(cashFromCashFlows.cashQrIn).add(cashFromCashFlows.cashTransferIn)
+            .subtract(cashFromCashFlows.cashQrOut).subtract(cashFromCashFlows.cashTransferOut)
+
         return CashBalanceDetails(
             totalCashFromSales = cashFromSales.cash.plus(cashFromSales.qr).plus(cashFromSales.transference),
             cashFromSalesInCash = cashFromSales.cash,
             cashFromSalesInOthers = cashFromSales.qr.plus(cashFromSales.transference),
-            totalCash = cashFromSales.cash.plus(cashFromCashFlows.cashIn),
-            totalOthers = cashFromSales.qr.plus(cashFromSales.transference).plus(cashFromCashFlows.cashQrIn)
-                .plus(cashFromCashFlows.cashTransferIn),
-            totalCashInBox = cashFromSales.cash.plus(cashFromCashFlows.cashIn).minus(cashFromCashFlows.cashOut)
-                .plus(initialMoney),
+            totalCash = netCash,
+            totalOthers = netOthers,
+            totalCashInBox = netCash.add(netOthers),
         )
     }
 

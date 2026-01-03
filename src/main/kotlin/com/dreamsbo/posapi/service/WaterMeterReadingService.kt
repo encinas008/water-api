@@ -157,7 +157,7 @@ class WaterMeterReadingService(
     }
 
     @Transactional
-    fun deleteReading(id: UUID) {
+    fun deleteReading(id: UUID, userId: UUID) {
         val reading = waterMeterReadingRepository.findById(id)
             .orElseThrow { NotFoundEntityException("No se ha encontrado la lectura. ReadingId = $id") }
 
@@ -165,25 +165,9 @@ class WaterMeterReadingService(
         val bill = waterBillRepository.findAll().firstOrNull { it.reading?.id == id && it.active }
         
         if (bill != null) {
-            // Si la factura está pagada, no se puede eliminar la lectura
-            if (bill.status.code == "PAID") {
-                throw BadRequestException("No se puede eliminar la lectura porque tiene una factura pagada (Nº ${bill.billNumber}). Por favor anule el pago primero.")
-            }
-            
-            // Si la factura está pendiente o vencida, se debe eliminar
-            // 1. Eliminar conceptos de la factura
-            val concepts = billConceptItemRepository.findByWaterBillIdAndActive(bill.id, true)
-            concepts.forEach { it.active = false }
-            billConceptItemRepository.saveAll(concepts)
-            
-            // 2. Desactivar la factura
-            bill.active = false
-            waterBillRepository.save(bill)
-            
-            // 3. Reversar la deuda del socio
-            val partner = reading.partner
-            partner.currentDebt = partner.currentDebt.subtract(bill.totalAmount)
-            partnerRepository.save(partner)
+            // Usar el servicio de facturación para anular la factura
+            // Esto maneja tanto facturas PENDING (las desactiva) como PAID (las marca como CANCELLED y gestiona reembolsos)
+            waterBillingService.cancelBill(bill.id, userId)
         }
 
         // Desactivar la lectura

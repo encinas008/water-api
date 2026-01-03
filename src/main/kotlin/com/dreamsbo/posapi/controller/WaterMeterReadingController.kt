@@ -62,7 +62,10 @@ class WaterMeterReadingController(
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    fun delete(@PathVariable id: UUID) {
-        waterMeterReadingService.deleteReading(id)
+    fun delete(
+        @PathVariable id: UUID,
+        @RequestParam userId: UUID
+    ) {
+        waterMeterReadingService.deleteReading(id, userId)
     }
 }
