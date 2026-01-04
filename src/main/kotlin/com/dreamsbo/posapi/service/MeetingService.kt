@@ -90,7 +90,7 @@ class MeetingService(
         
         // Si es una reunión CLASSIC, asignar automáticamente todos los socios activos
         if (meetingType?.code == "CLASSIC") {
-            assignAllPartnersToClassicMeeting(savedMeeting)
+            assignAllPartners(savedMeeting)
         }
         
         return toMeetingOutputDto(savedMeeting)
@@ -176,7 +176,7 @@ class MeetingService(
     }
 
     @Transactional
-    fun assignAllPartnersToClassicMeeting(meeting: MeetingEntity) {
+    fun assignAllPartners(meeting: MeetingEntity) {
         // Obtener todos los socios activos
         val allPartners = partnerRepository.findAllByActive(true, Sort.by(Sort.Direction.ASC, "partnerNumber"))
         
@@ -196,6 +196,30 @@ class MeetingService(
                     partner = partner,
                     attendanceDate = meeting.meetingDate,
                     present = false // Por defecto ausente, se puede cambiar después
+                )
+                meetingAttendanceRepository.save(attendance)
+            }
+        }
+    }
+
+    @Transactional
+    fun assignSelectedPartnersToMeeting(meeting: MeetingEntity, partnerIds: List<UUID>) {
+        val selectedPartners = partnerRepository.findAllById(partnerIds)
+        
+        selectedPartners.forEach { partner ->
+            val existingAttendance = meetingAttendanceRepository.findByMeetingIdAndPartnerIdAndDate(
+                meeting.id,
+                partner.id,
+                meeting.meetingDate,
+                true
+            )
+            
+            if (existingAttendance.isEmpty) {
+                val attendance = MeetingAttendanceEntity(
+                    meeting = meeting,
+                    partner = partner,
+                    attendanceDate = meeting.meetingDate,
+                    present = false 
                 )
                 meetingAttendanceRepository.save(attendance)
             }

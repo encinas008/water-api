@@ -31,7 +31,8 @@ data class MeetingInputDto(
     val meetingTypeCode: String? = null,
     val description: String? = null,
     val fine: BigDecimal,
-    val waitingMinutes: Int = 0
+    val waitingMinutes: Int = 0,
+    val partnerIds: List<UUID>? = null
 )
 
 data class MeetingUpdateDto(
