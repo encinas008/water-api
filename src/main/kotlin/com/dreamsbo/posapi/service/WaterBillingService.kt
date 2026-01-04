@@ -38,6 +38,7 @@ class WaterBillingService(
     private val monthlyPendingFinesService: MonthlyPendingFinesService,
     private val cashFlowService: CashFlowService,
     private val cashFlowTypeRepository: CashFlowTypeRepository,
+    private val billingConfigService: BillingConfigService,
 ) {
 
     @Transactional
@@ -400,18 +401,18 @@ class WaterBillingService(
     }
 
     private fun createDefaultBillConcepts(bill: WaterBillEntity, assignedDate: LocalDate): BigDecimal {
-        // Conceptos por defecto según la imagen:
-        // - Consumo de agua: baseAmount (consumo * tarifa)
-        // - Aporte al deporte: 2.0 BS
-        // - Tarifa básica: 15.0 BS
-        // - Aporte a la OTB: 3.0 BS
+        // Obtener valores configurables
+        val tarifaBasica = billingConfigService.getConfigValue("TARIFA_BASICA", BigDecimal("15.0"))
+        val multaExcesoM3 = billingConfigService.getConfigValue("MULTA_EXCESO_M3", BigDecimal("5.0"))
+        val aporteDeporte = billingConfigService.getConfigValue("APORTE_DEPORTE", BigDecimal("2.0"))
+        val aporteOTB = billingConfigService.getConfigValue("APORTE_OTB", BigDecimal("3.0"))
         
         // Crear concepto para el consumo excedente si aplica
-        val excessConcept = if (bill.consumptionM3 > BigDecimal("15")) {
-            val excessM3 = bill.consumptionM3.subtract(BigDecimal("15"))
+        val excessConcept = if (bill.consumptionM3 > tarifaBasica) {
+            val excessM3 = bill.consumptionM3.subtract(tarifaBasica)
             BillConceptItemEntity(
                 waterBill = bill,
-                conceptName = "Multa por exceso de consumo de agua ($excessM3 m³ × 5 Bs/m³)",
+                conceptName = "Multa por exceso de consumo de agua ($excessM3 m³ × $multaExcesoM3 Bs/m³)",
                 assignedDate = assignedDate,
                 amount = bill.baseAmount // Ya calculado como excedente en generateBill
             )
@@ -423,19 +424,19 @@ class WaterBillingService(
                 waterBill = bill,
                 conceptName = "Aporte al deporte",
                 assignedDate = assignedDate,
-                amount = BigDecimal("2.0")
+                amount = aporteDeporte
             ),
             BillConceptItemEntity(
                 waterBill = bill,
-                conceptName = "Tarifa Básica (Consumo hasta 15 m³)",
+                conceptName = "Tarifa Básica (Consumo hasta $tarifaBasica m³)",
                 assignedDate = assignedDate,
-                amount = BigDecimal("15.0")
+                amount = tarifaBasica
             ),
             BillConceptItemEntity(
                 waterBill = bill,
                 conceptName = "Aporte a la OTB",
                 assignedDate = assignedDate,
-                amount = BigDecimal("3.0")
+                amount = aporteOTB
             )
         )
         
