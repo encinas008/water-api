@@ -33,10 +33,7 @@ interface WaterMeterReadingRepository : JpaRepository<WaterMeterReadingEntity, U
     @Query("""
         SELECT r FROM WaterMeterReadingEntity r 
         WHERE r.active = :active 
-        AND (
-            LOWER(r.partner.fullName) LIKE LOWER(CONCAT('%', :search, '%')) OR
-            LOWER(r.partner.waterMeterNumber) LIKE LOWER(CONCAT('%', :search, '%'))
-        )
+        AND CAST(r.partner.partnerNumber AS string) LIKE CONCAT('%', :search, '%')
     """)
     fun findAllByActiveAndSearch(
         @Param("active") active: Boolean,
