@@ -427,7 +427,7 @@ class WaterBillingService(
             ),
             BillConceptItemEntity(
                 waterBill = bill,
-                conceptName = "Tarifa básica",
+                conceptName = "Tarifa Básica (Consumo hasta 15 m³)",
                 assignedDate = assignedDate,
                 amount = BigDecimal("15.0")
             ),

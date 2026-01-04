@@ -244,6 +244,20 @@ class ReportService(
             ))
         }
 
+        // Ordenar conceptos según requerimiento del usuario
+        // 1) Tarifa Basica
+        // 2) Aporte a la OTB
+        // 3) Aporte al Deporte
+        // 4) Multa por exeso de consumo o consumo
+        // 5) Reuniones
+        // 6) Trabajos
+        // 7) Otros ingresos
+        allConceptDtos.sortWith(Comparator { o1, o2 ->
+            val p1 = getConceptPriority(o1.conceptName)
+            val p2 = getConceptPriority(o2.conceptName)
+            p1.compareTo(p2)
+        })
+
         // Preparar parámetros
         val params: MutableMap<String, Any> = HashMap()
         params["receiptNumber"] = payment.receiptNumber
@@ -286,6 +300,20 @@ class ReportService(
         )
         
         return JasperExportManager.exportReportToPdf(jasperPrint)
+    }
+
+    private fun getConceptPriority(conceptName: String): Int {
+        val name = conceptName.uppercase()
+        return when {
+            name.contains("TARIFA BÁSICA") || name.contains("TARIFA BASICA") -> 1
+            name.contains("APORTE A LA OTB") -> 2
+            name.contains("APORTE AL DEPORTE") -> 3
+            name.contains("EXCESO") || name.contains("CONSUMO") -> 4
+            name.contains("MEETING") || name.contains("REUNIÓN") -> 5
+            name.contains("JOB") || name.contains("TRABAJO") -> 6
+            name.contains("OTROS INGRESOS") -> 7
+            else -> 99
+        }
     }
     
     private fun formatPaymentDateTime(date: LocalDate): String {
