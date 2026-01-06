@@ -6,6 +6,7 @@ import com.dreamsbo.posapi.dto.JobOutputDto
 import com.dreamsbo.posapi.dto.JobUpdateDto
 import com.dreamsbo.posapi.persistence.entity.JobEntity
 import com.dreamsbo.posapi.persistence.repository.JobRepository
+import com.dreamsbo.posapi.persistence.repository.JobAttendanceRepository
 import jakarta.transaction.Transactional
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
@@ -18,6 +19,7 @@ import java.util.*
 @Service
 class JobService(
     private val jobRepository: JobRepository,
+    private val jobAttendanceRepository: JobAttendanceRepository
 ) {
 
     fun findAll(): List<JobOutputDto> {
@@ -86,7 +88,20 @@ class JobService(
         val job = jobEntity.get()
 
         input.name?.let { job.name = it }
-        input.startDate?.let { job.startDate = it }
+        
+        val newDate = input.startDate
+        if (newDate != null && newDate != job.startDate) {
+            job.startDate = newDate
+            
+            // Actualizar la fecha en todas las asistencias relacionadas
+            val attendances = jobAttendanceRepository.findByJobIdAndActive(job.id, true)
+            attendances.forEach { attendance ->
+                attendance.attendanceDate = newDate
+                attendance.updatedAt = OffsetDateTime.now()
+            }
+            jobAttendanceRepository.saveAll(attendances)
+        }
+        
         input.description?.let { job.description = it }
         input.fine?.let { job.fine = it }
 

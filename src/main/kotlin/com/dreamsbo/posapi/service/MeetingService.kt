@@ -106,7 +106,19 @@ class MeetingService(
         val meeting = meetingEntity.get()
 
         input.name?.let { meeting.name = it.uppercase().trim() }
-        input.meetingDate?.let { meeting.meetingDate = it }
+        
+        val newDate = input.meetingDate
+        if (newDate != null && newDate != meeting.meetingDate) {
+            meeting.meetingDate = newDate
+            
+            // Actualizar la fecha en todas las asistencias relacionadas
+            val attendances = meetingAttendanceRepository.findByMeetingIdAndActive(meeting.id, true)
+            attendances.forEach { attendance ->
+                attendance.attendanceDate = newDate
+                attendance.updatedAt = OffsetDateTime.now()
+            }
+            meetingAttendanceRepository.saveAll(attendances)
+        }
         
         // Validar y actualizar hora si se proporciona
         if (input.hour != null || input.minute != null || input.amPm != null) {
