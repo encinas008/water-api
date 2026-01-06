@@ -15,6 +15,9 @@ import java.util.*
 interface WaterBillRepository : JpaRepository<WaterBillEntity, UUID> {
 
     fun findByPartnerIdAndActive(partnerId: UUID, active: Boolean, sort: Sort): List<WaterBillEntity>
+    
+    @Query("SELECT COUNT(b) FROM WaterBillEntity b WHERE b.partner.id = :partnerId AND b.status.code IN ('PENDING', 'OVERDUE', 'PARTIAL_PAID') AND b.active = true")
+    fun countUnpaidBillsByPartnerId(@Param("partnerId") partnerId: UUID): Long
 
     fun findByStatusCodeAndActive(statusCode: String, active: Boolean): List<WaterBillEntity>
 

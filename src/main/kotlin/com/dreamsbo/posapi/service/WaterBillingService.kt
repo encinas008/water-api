@@ -39,6 +39,7 @@ class WaterBillingService(
     private val cashFlowService: CashFlowService,
     private val cashFlowTypeRepository: CashFlowTypeRepository,
     private val billingConfigService: BillingConfigService,
+    private val connectionStatusTypeRepository: ConnectionStatusTypeRepository,
 ) {
 
     @Transactional
@@ -93,13 +94,18 @@ class WaterBillingService(
                 // Actualizar total de la factura basado en conceptos
                 savedBill.totalAmount = totalFromConcepts
                 savedBill.remainingBalance = totalFromConcepts
-                waterBillRepository.save(savedBill)
+                val finalBill = waterBillRepository.save(savedBill)
 
-                generatedBills.add(savedBill)
+                generatedBills.add(finalBill)
 
                 // Update partner's last billing date and debt
                 partner.lastBillingDate = LocalDate.now()
-                partner.currentDebt = partner.currentDebt.add(savedBill.totalAmount)
+                val previousDebt = partner.currentDebt
+                partner.currentDebt = partner.currentDebt.add(finalBill.totalAmount)
+                
+                // --- NUEVA LÓGICA DE CONTROL DE CORTE Y MULTAS ---
+                checkAndApplyAutoCutoff(partner, finalBill)
+                
                 partnerRepository.save(partner)
             }
 
@@ -108,6 +114,70 @@ class WaterBillingService(
 
     fun calculateBillAmount(consumption: BigDecimal, ratePerM3: BigDecimal): BigDecimal {
         return consumption * ratePerM3
+    }
+
+    /**
+     * Verifica si el socio debe ser cortado por mora (4 meses) 
+     * o si debe recibir una multa recurrente por estar en estado cortado (cada 3 meses).
+     */
+    private fun checkAndApplyAutoCutoff(partner: com.dreamsbo.posapi.persistence.entity.PartnerEntity, bill: WaterBillEntity) {
+        val unpaidBillsCount = waterBillRepository.countUnpaidBillsByPartnerId(partner.id)
+        val currentStatus = partner.connectionStatus?.code ?: "ACTIVE"
+        
+        // El monto de la multa es 50 Bs según requerimiento
+        val multaCorteMonto = billingConfigService.getConfigValue("MULTA_CORTE", BigDecimal("50.0"))
+        
+        if (currentStatus == "ACTIVE" && unpaidBillsCount >= 4) {
+            println("🚨 SOCIO CON MORA (4 MESES). Cambiando estado a CUT_OFF y aplicando multa de $multaCorteMonto Bs")
+            
+            // Cambiar estado a CORTADO
+            val cutOffStatus = connectionStatusTypeRepository.findByCodeAndActive("CUT_OFF", true)
+                .orElse(null)
+            if (cutOffStatus != null) {
+                partner.connectionStatus = cutOffStatus
+                
+                // Aplicar multa de 50 Bs
+                val disconnectionFine = BillConceptItemEntity(
+                    waterBill = bill,
+                    conceptName = "Multa por corte de servicio (Mora acumulada de 4 meses)",
+                    assignedDate = LocalDate.now(),
+                    amount = multaCorteMonto
+                )
+                billConceptItemRepository.save(disconnectionFine)
+                
+                // Actualizar totales de la factura
+                bill.totalAmount = bill.totalAmount.add(multaCorteMonto)
+                bill.remainingBalance = bill.remainingBalance.add(multaCorteMonto)
+                waterBillRepository.save(bill)
+                
+                // Actualizar deuda del socio
+                partner.currentDebt = partner.currentDebt.add(multaCorteMonto)
+            }
+        } else if (currentStatus == "CUT_OFF") {
+            // "despues de estar en un estado cortado cada 3 meses es multa de 50bs"
+            // Nota: El usuario dice "cada 3 meses", así que en la 3ra, 6ta, 9na... factura adicional después del corte.
+            
+            // Si tiene 7 unpaid bills (4 iniciales + 3 nuevas), 10, 13...
+            if (unpaidBillsCount > 4 && (unpaidBillsCount - 4) % 3 == 0L) {
+                 println("⚠️ SOCIO SIGUE CORTADO (${unpaidBillsCount - 4} meses adicionales). Aplicando multa recurrente de $multaCorteMonto Bs")
+                 
+                 val recurringFine = BillConceptItemEntity(
+                    waterBill = bill,
+                    conceptName = "Multa recurrente por estado cortado",
+                    assignedDate = LocalDate.now(),
+                    amount = multaCorteMonto
+                )
+                billConceptItemRepository.save(recurringFine)
+                
+                // Actualizar totales de la factura
+                bill.totalAmount = bill.totalAmount.add(multaCorteMonto)
+                bill.remainingBalance = bill.remainingBalance.add(multaCorteMonto)
+                waterBillRepository.save(bill)
+                
+                // Actualizar deuda del socio
+                partner.currentDebt = partner.currentDebt.add(multaCorteMonto)
+            }
+        }
     }
 
     fun getBillsByPartner(partnerId: UUID): List<WaterBillOutputDto> {
@@ -293,6 +363,10 @@ class WaterBillingService(
         partner.lastBillingDate = LocalDate.now()
         val previousDebt = partner.currentDebt
         partner.currentDebt = partner.currentDebt.add(finalBill.totalAmount)
+        
+        // --- NUEVA LÓGICA DE CONTROL DE CORTE Y MULTAS ---
+        checkAndApplyAutoCutoff(partner, finalBill)
+        
         partnerRepository.save(partner)
         println("✅ Socio actualizado. Deuda anterior: $previousDebt, Nueva deuda: ${partner.currentDebt}")
 
@@ -388,6 +462,10 @@ class WaterBillingService(
         
         // La nueva deuda es: Deuda Anterior + Total Factura + Multas actuales
         partner.currentDebt = partner.currentDebt.add(finalBill.totalAmount).add(currentFines.totalFines)
+        
+        // --- NUEVA LÓGICA DE CONTROL DE CORTE Y MULTAS ---
+        checkAndApplyAutoCutoff(partner, finalBill)
+        
         partnerRepository.save(partner)
         println("✅ Socio actualizado. Deuda anterior: $previousDebt, Multas añadidas: ${currentFines.totalFines}, Nueva deuda: ${partner.currentDebt}")
         
