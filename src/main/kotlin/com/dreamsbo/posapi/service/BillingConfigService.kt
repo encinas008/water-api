@@ -26,9 +26,26 @@ class BillingConfigService(
      * Obtiene una configuración específica por su clave
      */
     fun getConfigByKey(key: String): BillingConfigOutputDto {
-        val config = billingConfigRepository.findByConfigKeyAndActive(key, true)
-            .orElseThrow { NotFoundEntityException("Configuración no encontrada: $key") }
-        return toOutputDto(config)
+        return billingConfigRepository.findByConfigKeyAndActive(key, true)
+            .map { toOutputDto(it) }
+            .orElseGet {
+                // Si no existe, devolvemos un objeto virtual con valores por defecto para no romper la UI
+                val defaultValue = when(key) {
+                    "MULTA_CORTE" -> BigDecimal("50.0")
+                    "MANTENIMIENTO_SUSPENDIDA" -> BigDecimal("5.0")
+                    "TARIFA_BASICA" -> BigDecimal("15.0")
+                    "MULTA_EXCESO_M3" -> BigDecimal("5.0")
+                    "APORTE_DEPORTE" -> BigDecimal("2.0")
+                    "APORTE_OTB" -> BigDecimal("3.0")
+                    else -> BigDecimal.ZERO
+                }
+                BillingConfigOutputDto(
+                    id = UUID.randomUUID(),
+                    configKey = key,
+                    configValue = defaultValue,
+                    description = "Configuración por defecto (Autogenerada)"
+                )
+            }
     }
 
     /**
@@ -46,9 +63,16 @@ class BillingConfigService(
      */
     fun updateConfig(key: String, input: BillingConfigUpdateDto): BillingConfigOutputDto {
         val config = billingConfigRepository.findByConfigKeyAndActive(key, true)
-            .orElseThrow { NotFoundEntityException("Configuración no encontrada: $key") }
+            .orElseGet {
+                BillingConfigEntity(
+                    configKey = key,
+                    configValue = input.configValue,
+                    description = "Configuración de $key"
+                )
+            }
 
         config.configValue = input.configValue
+        config.updatedAt = java.time.OffsetDateTime.now()
         val savedConfig = billingConfigRepository.save(config)
 
         return toOutputDto(savedConfig)

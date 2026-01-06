@@ -154,8 +154,8 @@ class WaterBillingService(
                 partner.currentDebt = partner.currentDebt.add(multaCorteMonto)
             }
         } else if (currentStatus == "SUSPENDED") {
-            // --- LÓGICA: Pago por mantenimiento de 5 Bs (mensual mientras esté suspendida) ---
-            val maintenanceFeeMonto = BigDecimal("5.0")
+            // --- LÓGICA: Pago por mantenimiento (mensual mientras esté suspendida) ---
+            val maintenanceFeeMonto = billingConfigService.getConfigValue("MANTENIMIENTO_SUSPENDIDA", BigDecimal("5.0"))
             val maintenanceFee = BillConceptItemEntity(
                 waterBill = bill,
                 conceptName = "Pago por mantenimiento",
