@@ -34,6 +34,7 @@ class WaterPaymentService(
     private val billConceptItemRepository: BillConceptItemRepository,
     private val monthlyPendingFinesService: MonthlyPendingFinesService,
     private val waterPaymentDetailRepository: WaterPaymentDetailRepository,
+    private val connectionStatusTypeRepository: ConnectionStatusTypeRepository,
 ) {
 
     @Transactional
@@ -141,6 +142,10 @@ class WaterPaymentService(
 
         // Update partner debt (Total del pago: Factura + Multas)
         partner.currentDebt = partner.currentDebt.subtract(totalPaymentAmount)
+        
+        // --- NUEVA LÓGICA: Reactivación automática si estaba cortado ---
+        checkAndReactivatePartner(partner)
+        
         partnerRepository.save(partner)
 
         // NOTA: No creamos CashFlow automáticamente desde los pagos de agua
@@ -470,6 +475,24 @@ class WaterPaymentService(
         bill.status = newStatus
         bill.updatedAt = OffsetDateTime.now()
         waterBillRepository.save(bill)
+    }
+
+    /**
+     * Verifica si un socio que está en estado CORTADO debe volver a estar ACTIVO
+     * porque ya tiene menos de 4 facturas pendientes.
+     */
+    private fun checkAndReactivatePartner(partner: com.dreamsbo.posapi.persistence.entity.PartnerEntity) {
+        val unpaidBillsCount = waterBillRepository.countUnpaidBillsByPartnerId(partner.id)
+        val currentStatus = partner.connectionStatus?.code ?: "ACTIVE"
+        
+        if (currentStatus == "CUT_OFF" && unpaidBillsCount < 4) {
+            println("🔓 REACTIVACIÓN AUTOMÁTICA. El socio ${partner.fullName} ya tiene menos de 4 facturas impagas ($unpaidBillsCount). Cambiando a ACTIVE.")
+            val activeStatus = connectionStatusTypeRepository.findByCodeAndActive("ACTIVE", true)
+                .orElse(null)
+            if (activeStatus != null) {
+                partner.connectionStatus = activeStatus
+            }
+        }
     }
 
     private fun generateReceiptNumber(partnerId: UUID): String {

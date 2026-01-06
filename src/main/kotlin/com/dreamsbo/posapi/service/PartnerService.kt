@@ -181,6 +181,13 @@ class PartnerService(
         input.notes?.let { partner.notes = it }
 
         input.connectionStatusCode?.let { code ->
+            // Validar: Si el socio está CORTADO, no se puede cambiar el estado manualmente si aún tiene deuda por mora
+            if (partner.connectionStatus?.code == "CUT_OFF" && code != "CUT_OFF") {
+                val unpaidBillsCount = waterBillRepository.countUnpaidBillsByPartnerId(partner.id)
+                if (unpaidBillsCount >= 4) {
+                    throw BadRequestException("No se puede cambiar el estado de un socio CORTADO manualmente hasta que regularice su deuda (mínimo menos de 4 facturas pendientes).")
+                }
+            }
             partner.connectionStatus = connectionStatusTypeRepository.findByCodeAndActive(code, true)
                 .orElseThrow { NotFoundEntityException("Estado de conexión no encontrado: $code") }
         }
@@ -212,6 +219,15 @@ class PartnerService(
         }
 
         val partner = partnerEntity.get()
+        
+        // Validar: Si el socio está CORTADO, no se puede cambiar el estado manualmente si aún tiene deuda por mora
+        if (partner.connectionStatus?.code == "CUT_OFF" && input.connectionStatusCode != "CUT_OFF") {
+            val unpaidBillsCount = waterBillRepository.countUnpaidBillsByPartnerId(partner.id)
+            if (unpaidBillsCount >= 4) {
+                throw BadRequestException("No se puede cambiar el estado de un socio CORTADO manualmente hasta que regularice su deuda (mínimo menos de 4 facturas pendientes).")
+            }
+        }
+
         partner.connectionStatus = connectionStatusTypeRepository.findByCodeAndActive(input.connectionStatusCode, true)
             .orElseThrow { NotFoundEntityException("Estado de conexión no encontrado: ${input.connectionStatusCode}") }
 
