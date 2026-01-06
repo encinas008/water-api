@@ -153,6 +153,23 @@ class WaterBillingService(
                 // Actualizar deuda del socio
                 partner.currentDebt = partner.currentDebt.add(multaCorteMonto)
             }
+        } else if (currentStatus == "SUSPENDED") {
+            // --- LÓGICA: Pago por mantenimiento de 5 Bs (mensual mientras esté suspendida) ---
+            val maintenanceFeeMonto = BigDecimal("5.0")
+            val maintenanceFee = BillConceptItemEntity(
+                waterBill = bill,
+                conceptName = "Pago por mantenimiento",
+                assignedDate = LocalDate.now(),
+                amount = maintenanceFeeMonto
+            )
+            billConceptItemRepository.save(maintenanceFee)
+            
+            // Actualizar totales de la factura y deuda del socio
+            bill.totalAmount = bill.totalAmount.add(maintenanceFeeMonto)
+            bill.remainingBalance = bill.remainingBalance.add(maintenanceFeeMonto)
+            waterBillRepository.save(bill)
+            partner.currentDebt = partner.currentDebt.add(maintenanceFeeMonto)
+
         } else if (currentStatus == "CUT_OFF") {
             // "despues de estar en un estado cortado cada 3 meses es multa de 50bs"
             // Nota: El usuario dice "cada 3 meses", así que en la 3ra, 6ta, 9na... factura adicional después del corte.
