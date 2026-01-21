@@ -3,6 +3,7 @@ import psycopg2
 import uuid
 import datetime
 import re
+import os
 
 # --- CONFIGURACIÓN ---
 PG_CONFIG = {
@@ -14,7 +15,8 @@ PG_CONFIG = {
     'options': '-c search_path=pos'
 }
 
-SQLITE_DB_PATH = 'OTB.db'
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+SQLITE_DB_PATH = os.path.normpath(os.path.join(BASE_DIR, '..', 'OTB.db'))
 
 # UUIDs de estados de factura
 ID_STATUS_PENDING = '734d99f5-31ff-4d8f-8427-467dfcc5b76a'
@@ -114,59 +116,78 @@ def migrate_readings_and_bills():
         '5': 'Exceso de Consumo de Agua'
     }
 
-    # 2. Procesar lecturas y crear facturas únicas por mes de cobro
+    # 2. Procesar lecturas y multas para crear facturas únicas por mes de cobro
     print("Migrando Lecturas y Facturas...")
+    
+    # Obtener todas las lecturas
     lite_cur.execute("SELECT CODIGOSOCIO, mesCorrespondiente, mesDeCobro, lecturaRegistrada FROM LecturaDeAgua")
-    lecturas = lite_cur.fetchall()
+    lecturas_data = lite_cur.fetchall()
+    readings_map = {} # (s_id, mes_cobro) -> (mes_corr, val_str)
     
-    # Ordenar por socio y mes Correspondiente para calcular bien el consumo
-    def sort_key_corr(x):
+    # Obtener todas las multas de agua para asegurar que no falten periodos
+    # Ya las tenemos en multas_grouped, extraemos las llaves
+    
+    # Union de todas las llaves (socio, mes_cobro)
+    all_bill_keys = set()
+    for scode, mes_corr, mes_cobro, val_str in lecturas_data:
         try:
-            d = parse_month_year(x[1]) 
-            return (int(float(x[0])), d if d else datetime.date(1900, 1, 1))
-        except: return (0, datetime.date(1900, 1, 1))
+            s_id = int(float(scode))
+            all_bill_keys.add((s_id, mes_cobro))
+            readings_map[(s_id, mes_cobro)] = (mes_corr, val_str)
+        except: continue
+        
+    for k in multas_grouped.keys():
+        all_bill_keys.add(k)
+        
+    # Ordenar llaves por socio y luego por fecha del mes de cobro
+    def sort_key_bills(k):
+        s_id, mes_cobro = k
+        d = parse_month_year(mes_cobro)
+        return (s_id, d if d else datetime.date(1900, 1, 1))
     
-    lecturas_sorted = sorted(lecturas, key=sort_key_corr)
+    sorted_keys = sorted(list(all_bill_keys), key=sort_key_bills)
 
-    processed_bills = set() # (socio_id, mes_cobro) para evitar duplicados
     last_readings = {} 
     reading_count = 0
     bill_count = 0
 
-    for scode, mes_corr, mes_cobro, val_str in lecturas_sorted:
+    for s_id, mes_cobro in sorted_keys:
         try:
-            s_id = int(float(scode))
             p_uuid = partner_map.get(s_id)
             if not p_uuid: continue
-
-            # Clave única para evitar duplicar facturas del mismo mes de cobro
-            bill_key = (s_id, mes_cobro)
-            if bill_key in processed_bills: continue
-
-            val = round(float(val_str), 2)
-            prev_val = last_readings.get(s_id, 0.0)
-            consumption = round(max(0, val - prev_val), 2)
-            last_readings[s_id] = val
 
             # La factura se etiqueta con el Mes de Cobro (ej. "Septiembre-2025")
             r_date_invoice = parse_month_year(mes_cobro)
             if not r_date_invoice: continue
             
-            # La fecha de la lectura física es el mes Correspondiente
-            r_date_reading = parse_month_year(mes_corr)
-            r_date_reading_end = get_billing_period_end(r_date_reading) if r_date_reading else r_date_invoice
-            
-            r_uuid = str(uuid.uuid4())
-            pg_cur.execute(
-                """INSERT INTO water_meter_reading (
-                    reading_id, partner_id, reading_date, current_reading, 
-                    previous_reading, consumption, active, created_at
-                ) VALUES (%s, %s, %s, %s, %s, %s, True, NOW())""",
-                (r_uuid, p_uuid, r_date_reading_end, val, prev_val, consumption)
-            )
-            reading_count += 1
+            # Datos de lectura si existen
+            reading_info = readings_map.get((s_id, mes_cobro))
+            r_uuid = None
+            consumption = 0.0
+            val = last_readings.get(s_id, 0.0) # Por defecto mantenemos la última lectura
+            prev_val = val
 
-            components = multas_grouped.get(bill_key, [])
+            if reading_info:
+                mes_corr, val_str = reading_info
+                val = round(float(val_str), 2)
+                consumption = round(max(0, val - prev_val), 2)
+                last_readings[s_id] = val
+                
+                # La fecha de la lectura física es el mes Correspondiente
+                r_date_reading = parse_month_year(mes_corr)
+                r_date_reading_end = get_billing_period_end(r_date_reading) if r_date_reading else r_date_invoice
+                
+                r_uuid = str(uuid.uuid4())
+                pg_cur.execute(
+                    """INSERT INTO water_meter_reading (
+                        reading_id, partner_id, reading_date, current_reading, 
+                        previous_reading, consumption, active, created_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, True, NOW())""",
+                    (r_uuid, p_uuid, r_date_reading_end, val, prev_val, consumption)
+                )
+                reading_count += 1
+
+            components = multas_grouped.get((s_id, mes_cobro), [])
             total_amount = sum(c['amount'] for c in components) if components else 0.0
             
             is_paid = all(c['paid'] for c in components) if components else False
@@ -178,7 +199,7 @@ def migrate_readings_and_bills():
             paid_amt = total_amount if (is_paid or total_amount <= 0) else 0.0
 
             b_uuid = str(uuid.uuid4())
-            bill_number = f"FAC-{s_id}-{reading_count}"
+            bill_number = f"FAC-{s_id}-{bill_count + 1}"
 
             pg_cur.execute(
                 """INSERT INTO water_bill (
@@ -193,7 +214,6 @@ def migrate_readings_and_bills():
                  remaining, status_id, r_date_invoice + datetime.timedelta(days=15), pay_date)
             )
             bill_count += 1
-            processed_bills.add(bill_key)
 
             for c in components:
                 name = concept_names_map.get(c['id'], "Concepto Agua")
@@ -204,18 +224,19 @@ def migrate_readings_and_bills():
                     (str(uuid.uuid4()), b_uuid, name, c['amount'], r_date_invoice)
                 )
 
+
         except Exception as e:
-            print(f"Error procesando socio {scode} en periodo {mes_cobro}: {e}")
+            print(f"Error procesando socio {s_id} en periodo {mes_cobro}: {e}")
             continue
 
         except Exception as e:
-            print(f"Error procesando socio {scode} en periodo {mes_cobro}: {e}")
+            print(f"Error procesando socio {s_id} en periodo {mes_cobro}: {e}")
             continue
 
         except Exception as e:
             # No hacemos rollback total aquí porque matamos la transacción para el resto de filas
             # Simplemente imprimimos el error y seguimos
-            print(f"Error procesando lectura {scode} {mes_corr}: {e}")
+            print(f"Error procesando lectura {s_id} {mes_cobro}: {e}")
             continue
 
     pg_conn.commit()
