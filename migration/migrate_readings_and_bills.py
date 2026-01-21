@@ -92,20 +92,21 @@ def migrate_readings_and_bills():
         '5': 'Exceso de Consumo de Agua'
     }
 
-    # 1. Agrupar SOLO conceptos de AGUA (11, 12, 13, 5) para evitar doble cobro con las tablas de asistencia
-    print("Pre-procesando conceptos de AGUA desde SQLite...")
+    # 1. Agrupar conceptos de la tabla MultaAsignada (Excluyendo Trabajos y Reuniones)
+    print("Pre-procesando conceptos desde SQLite...")
     lite_cur.execute("""
-        SELECT SOCIOCODIGO, MESYANIOQUESECOBRARA, MULTAID, MONTO, COBRADO, FECHACOMPLETA 
+        SELECT SOCIOCODIGO, MESYANIO, MULTAID, MONTO, COBRADO, FECHACOMPLETA, IDDelMotivo 
         FROM MultaAsignada
-        WHERE MULTAID IN ('5', '11', '12', '13')
+        WHERE MULTAID NOT IN ('1', '2', '0')
     """)
-    multas_grouped = {} # (socio_id, mes_cobro) -> list of components
-    for scode, mes_cobro, mid, monto, cobrado, fecha_p in lite_cur.fetchall():
+    multas_grouped = {} # (socio_id, mes_ocurrencia) -> list of components
+    for scode, mes_ocurr, mid, monto, cobrado, fecha_p, motive_id in lite_cur.fetchall():
         try:
-            k = (int(float(scode)), mes_cobro)
+            if not mes_ocurr: continue
+            k = (int(float(scode)), mes_ocurr)
             if k not in multas_grouped: multas_grouped[k] = []
             multas_grouped[k].append({
-                'id': mid, 'amount': monto, 'paid': cobrado == 1, 'pay_date': fecha_p
+                'id': mid, 'amount': monto, 'paid': cobrado == 1, 'pay_date': fecha_p, 'motive_id': motive_id
             })
         except: continue
 
@@ -113,36 +114,48 @@ def migrate_readings_and_bills():
         '11': 'Cargo Fijo / Formulario',
         '12': 'Consumo Mínimo',
         '13': 'Alcantarillado / Mantenimiento',
-        '5': 'Exceso de Consumo de Agua'
+        '5': 'Exceso de Consumo de Agua',
+        '3': 'Multa por mora',
+        # '4': 'Multa por AULL',
+        '6': 'Multa aporte cordones'
     }
 
-    # 2. Procesar lecturas y multas para crear facturas únicas por mes de cobro
+    def get_rich_name(mid, motive_id):
+        base_name = concept_names_map.get(str(mid), f"Concepto {mid}")
+        if not motive_id or motive_id == 'null' or motive_id == '':
+            return base_name
+        
+        try:
+            if str(mid) == '4': # AULL
+                lite_cur.execute("SELECT NOMBRE FROM AULL WHERE ID = ?", (motive_id,))
+                res = lite_cur.fetchone()
+                if res: return f"Multa AULL: {res[0]}"
+        except: pass
+        return base_name
+
+    # 2. Procesar lecturas y multas para crear facturas únicas por mes de ocurrencia
     print("Migrando Lecturas y Facturas...")
     
-    # Obtener todas las lecturas
-    lite_cur.execute("SELECT CODIGOSOCIO, mesCorrespondiente, mesDeCobro, lecturaRegistrada FROM LecturaDeAgua")
-    lecturas_data = lite_cur.fetchall()
-    readings_map = {} # (s_id, mes_cobro) -> (mes_corr, val_str)
-    
-    # Obtener todas las multas de agua para asegurar que no falten periodos
-    # Ya las tenemos en multas_grouped, extraemos las llaves
-    
-    # Union de todas las llaves (socio, mes_cobro)
+    # Obtener todas las lecturas (mesCorrespondiente es el mes de consumo)
+    lite_cur.execute("SELECT CODIGOSOCIO, mesCorrespondiente, lecturaRegistrada FROM LecturaDeAgua")
+    readings_map = {} # (s_id, mes_ocurr) -> val_str
     all_bill_keys = set()
-    for scode, mes_corr, mes_cobro, val_str in lecturas_data:
+    
+    for scode, mes_corr, val_str in lite_cur.fetchall():
         try:
+            if not mes_corr: continue
             s_id = int(float(scode))
-            all_bill_keys.add((s_id, mes_cobro))
-            readings_map[(s_id, mes_cobro)] = (mes_corr, val_str)
+            all_bill_keys.add((s_id, mes_corr))
+            readings_map[(s_id, mes_corr)] = val_str
         except: continue
         
     for k in multas_grouped.keys():
         all_bill_keys.add(k)
         
-    # Ordenar llaves por socio y luego por fecha del mes de cobro
+    # Ordenar llaves por socio y luego por fecha
     def sort_key_bills(k):
-        s_id, mes_cobro = k
-        d = parse_month_year(mes_cobro)
+        s_id, mes_ocurr = k
+        d = parse_month_year(mes_ocurr)
         return (s_id, d if d else datetime.date(1900, 1, 1))
     
     sorted_keys = sorted(list(all_bill_keys), key=sort_key_bills)
@@ -151,31 +164,29 @@ def migrate_readings_and_bills():
     reading_count = 0
     bill_count = 0
 
-    for s_id, mes_cobro in sorted_keys:
+    for s_id, mes_ocurr in sorted_keys:
         try:
             p_uuid = partner_map.get(s_id)
             if not p_uuid: continue
 
-            # La factura se etiqueta con el Mes de Cobro (ej. "Septiembre-2025")
-            r_date_invoice = parse_month_year(mes_cobro)
+            # La factura se etiqueta con el Mes de Ocurrencia (ej. "Septiembre-2025")
+            r_date_invoice = parse_month_year(mes_ocurr)
             if not r_date_invoice: continue
             
             # Datos de lectura si existen
-            reading_info = readings_map.get((s_id, mes_cobro))
+            val_str = readings_map.get((s_id, mes_ocurr))
             r_uuid = None
             consumption = 0.0
-            val = last_readings.get(s_id, 0.0) # Por defecto mantenemos la última lectura
-            prev_val = val
+            prev_val = last_readings.get(s_id, 0.0)
+            val = prev_val
 
-            if reading_info:
-                mes_corr, val_str = reading_info
+            if val_str is not None:
                 val = round(float(val_str), 2)
                 consumption = round(max(0, val - prev_val), 2)
                 last_readings[s_id] = val
                 
-                # La fecha de la lectura física es el mes Correspondiente
-                r_date_reading = parse_month_year(mes_corr)
-                r_date_reading_end = get_billing_period_end(r_date_reading) if r_date_reading else r_date_invoice
+                # La fecha de la lectura física
+                r_date_reading_end = get_billing_period_end(r_date_invoice)
                 
                 r_uuid = str(uuid.uuid4())
                 pg_cur.execute(
@@ -187,10 +198,15 @@ def migrate_readings_and_bills():
                 )
                 reading_count += 1
 
-            components = multas_grouped.get((s_id, mes_cobro), [])
+            components = multas_grouped.get((s_id, mes_ocurr), [])
             total_amount = sum(c['amount'] for c in components) if components else 0.0
             
-            is_paid = all(c['paid'] for c in components) if components else False
+            # Un bill está PAGADO si TODOS sus componentes están marcados como COBRADO=1
+            is_paid = all(c['paid'] for c in components) if components else True
+            # Si no hay componentes pero hubo lectura con consumo 0, total es 0 y es PAID
+            if not components and consumption == 0:
+                is_paid = True
+            
             pay_date_str = next((c['pay_date'] for c in reversed(components) if c['pay_date'] and c['pay_date'] != '""'), None)
             pay_date = parse_lite_date(pay_date_str)
             
@@ -199,7 +215,7 @@ def migrate_readings_and_bills():
             paid_amt = total_amount if (is_paid or total_amount <= 0) else 0.0
 
             b_uuid = str(uuid.uuid4())
-            bill_number = f"FAC-{s_id}-{bill_count + 1}"
+            bill_number = f"FAC-{s_id}-{28000 + bill_count + 1}" # Usamos un correlativo alto para evitar conflictos o seguir el anterior
 
             pg_cur.execute(
                 """INSERT INTO water_bill (
@@ -216,7 +232,7 @@ def migrate_readings_and_bills():
             bill_count += 1
 
             for c in components:
-                name = concept_names_map.get(c['id'], "Concepto Agua")
+                name = get_rich_name(c['id'], c['motive_id'])
                 pg_cur.execute(
                     """INSERT INTO bill_concept_item (
                         bill_concept_item_id, water_bill_id, concept_name, amount, assigned_date, active, created_at
@@ -224,9 +240,8 @@ def migrate_readings_and_bills():
                     (str(uuid.uuid4()), b_uuid, name, c['amount'], r_date_invoice)
                 )
 
-
         except Exception as e:
-            print(f"Error procesando socio {s_id} en periodo {mes_cobro}: {e}")
+            print(f"Error procesando socio {s_id} en periodo {mes_ocurr}: {e}")
             continue
 
         except Exception as e:
