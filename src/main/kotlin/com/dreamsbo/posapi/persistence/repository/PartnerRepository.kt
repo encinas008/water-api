@@ -22,14 +22,18 @@ interface PartnerRepository : JpaRepository<PartnerEntity, UUID> {
     @Query("""
         SELECT p FROM PartnerEntity p 
         WHERE p.active = :active 
-        AND (
-            LOWER(p.fullName) LIKE LOWER(CONCAT('%', :search, '%')) OR
-            CAST(p.partnerNumber AS text) LIKE CONCAT('%', :search, '%')
-        )
+        AND CAST(p.partnerNumber AS string) = :search
     """)
     fun findAllByActiveAndSearch(
         @Param("active") active: Boolean,
         @Param("search") search: String,
         pageable: Pageable
     ): Page<PartnerEntity>
+
+    @Query("""
+        SELECT p FROM PartnerEntity p 
+        WHERE p.active = true 
+        AND CAST(p.partnerNumber AS string) = :query
+    """)
+    fun searchByTerm(@Param("query") query: String): List<PartnerEntity>
 }

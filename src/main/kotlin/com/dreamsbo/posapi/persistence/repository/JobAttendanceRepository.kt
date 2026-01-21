@@ -41,6 +41,12 @@ interface JobAttendanceRepository : JpaRepository<JobAttendanceEntity, UUID> {
         @Param("endDate") endDate: LocalDate,
         @Param("active") active: Boolean
     ): List<JobAttendanceEntity>
+
+    @Query("SELECT a FROM JobAttendanceEntity a WHERE a.partner.id = :partnerId AND a.active = :active AND a.job.active = :active AND a.present = false")
+    fun findAbsencesByPartner(
+        @Param("partnerId") partnerId: UUID,
+        @Param("active") active: Boolean
+    ): List<JobAttendanceEntity>
     
     // Obtener el primer registro de asistencia de un socio para un trabajo (para determinar si está asignado)
     @Query("SELECT a FROM JobAttendanceEntity a WHERE a.job.id = :jobId AND a.partner.id = :partnerId AND a.active = :active ORDER BY a.attendanceDate ASC")

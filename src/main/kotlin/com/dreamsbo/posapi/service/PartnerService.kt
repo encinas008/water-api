@@ -41,7 +41,12 @@ class PartnerService(
     }
 
     fun findAllPaginated(page: Int, size: Int, search: String?): Page<PartnerOutputDto> {
-        val pageable: Pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"))
+        val pageable: Pageable = if (search.isNullOrBlank()) {
+            PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"))
+        } else {
+            // Respect custom ORDER BY in repository query
+            PageRequest.of(page, size, Sort.unsorted())
+        }
         
         val partnerPage = if (search.isNullOrBlank()) {
             partnerRepository.findAllByActive(true, pageable)
@@ -270,13 +275,7 @@ class PartnerService(
     }
 
     fun searchPartners(query: String): List<PartnerOutputDto> {
-        val allPartners = partnerRepository.findAllByActive(true, Sort.by(Sort.Direction.DESC, "createdAt"))
-
-        val filteredPartners = allPartners.filter {
-            it.partnerNumber?.toString()?.contains(query, ignoreCase = true) == true
-        }
-
-        return filteredPartners.map { toPartnerOutputDto(it) }
+        return partnerRepository.searchByTerm(query.trim()).map { toPartnerOutputDto(it) }
     }
 
     fun checkWaterMeterNumberExists(waterMeterNumber: String, excludePartnerId: UUID? = null): Boolean {

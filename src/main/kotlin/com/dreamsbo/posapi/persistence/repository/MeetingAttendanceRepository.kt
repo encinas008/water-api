@@ -27,6 +27,12 @@ interface MeetingAttendanceRepository : JpaRepository<MeetingAttendanceEntity, U
         @Param("endDate") endDate: LocalDate,
         @Param("active") active: Boolean
     ): List<MeetingAttendanceEntity>
+
+    @Query("SELECT ma FROM MeetingAttendanceEntity ma WHERE ma.partner.id = :partnerId AND ma.active = :active AND ma.meeting.active = :active AND ma.present = false")
+    fun findAbsencesByPartner(
+        @Param("partnerId") partnerId: UUID,
+        @Param("active") active: Boolean
+    ): List<MeetingAttendanceEntity>
     
     // Obtener registros de asistencia únicos por socio (para determinar asignaciones)
     @Query("SELECT DISTINCT ma.partner.id FROM MeetingAttendanceEntity ma WHERE ma.meeting.id = :meetingId AND ma.active = :active")

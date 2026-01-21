@@ -94,6 +94,16 @@ class WaterBillingService(
                 // Actualizar total de la factura basado en conceptos
                 savedBill.totalAmount = totalFromConcepts
                 savedBill.remainingBalance = totalFromConcepts
+                
+                // Si el total es 0, marcar como PAGADA automáticamente
+                if (totalFromConcepts <= BigDecimal.ZERO) {
+                    val paidStatus = billStatusTypeRepository.findByCodeAndActive("PAID", true).orElse(null)
+                    if (paidStatus != null) {
+                        savedBill.status = paidStatus
+                        savedBill.paidDate = LocalDate.now()
+                    }
+                }
+                
                 val finalBill = waterBillRepository.save(savedBill)
 
                 generatedBills.add(finalBill)
@@ -274,7 +284,7 @@ class WaterBillingService(
     }
 
     fun findAllPaginated(page: Int, size: Int, search: String?, statusCode: String?): Page<WaterBillOutputDto> {
-        val pageable: Pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"))
+        val pageable: Pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "billingPeriodStart"))
         
         val billPage = when {
             !search.isNullOrBlank() && !statusCode.isNullOrBlank() -> {
@@ -600,9 +610,40 @@ class WaterBillingService(
                 entity.billingPeriodStart.monthValue, 
                 entity.billingPeriodStart.year
             )
-            pendingFines = monthlyFines.jobAbsences + monthlyFines.meetingAbsences
-            totalFinesAmount = monthlyFines.totalFines
+            val allFines = monthlyFines.jobAbsences + monthlyFines.meetingAbsences
+            
+            val conceptNames = concepts.map { it.conceptName.lowercase().trim() }
+        pendingFines = allFines.filter { fine ->
+            val fineNameLower = fine.name.lowercase().trim()
+            conceptNames.none { it.contains(fineNameLower) }
         }
+        totalFinesAmount = pendingFines.sumOf { it.fine }
+    }
+    
+    // El totalPayableAmount es la suma del saldo de la factura y las multas pendientes
+    val totalPayableAmount = calculatedRemainingBalance.add(totalFinesAmount)
+        
+        // Reconciliation: If the database status is inconsistent with the payments found,
+        // we use a computed status for the DTO. This is common after migrations.
+        val effectiveStatusCode = when {
+            entity.status.code == "CANCELLED" -> "CANCELLED"
+            entity.status.code == "PAID" -> "PAID"
+            // Only force PAID if there's actual payment history or if it was already marked as such
+            // This avoids showing 0-amount PENDING bills as PAID if they haven't been processed yet
+            totalPaidAmount > BigDecimal.ZERO && calculatedRemainingBalance <= BigDecimal.ZERO -> "PAID"
+            totalPaidAmount > BigDecimal.ZERO -> "PARTIAL_PAID"
+            else -> entity.status.code
+        }
+
+        val effectiveStatusName = when (effectiveStatusCode) {
+            "PAID" -> "PAGADA"
+            "PARTIAL_PAID" -> "PAGO PARCIAL"
+            "PENDING" -> "PENDIENTE"
+            "CANCELLED" -> "CANCELADA"
+            "OVERDUE" -> "VENCIDA"
+            else -> entity.status.name
+        }
+
         
         return WaterBillOutputDto(
             id = entity.id,
@@ -619,15 +660,15 @@ class WaterBillingService(
             totalAmount = entity.totalAmount,
             paidAmount = totalPaidAmount,
             remainingBalance = calculatedRemainingBalance,
-            statusCode = entity.status.code,
-            statusName = entity.status.name,
+            statusCode = effectiveStatusCode,
+            statusName = effectiveStatusName,
             dueDate = entity.dueDate,
-            paidDate = entity.paidDate,
+            paidDate = entity.paidDate ?: if (effectiveStatusCode == "PAID") LocalDate.now() else null,
             isOverdue = isOverdue,
             concepts = concepts,
             pendingFines = pendingFines,
             totalFinesAmount = totalFinesAmount,
-            totalPayableAmount = entity.totalAmount.add(totalFinesAmount),
+            totalPayableAmount = totalPayableAmount,
             totalFinesPaid = totalFinesPaid,
             createdAt = entity.createdAt,
             updatedAt = entity.updatedAt

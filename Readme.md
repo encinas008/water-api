@@ -33,9 +33,14 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 uuid_generate_v4()
 ```
 
+Backup database
+```cmd
+docker exec -t water-db pg_dump -U postgres dreamsbo > backup20260114.sql
+```
+
 Restore database
 ```cmd
-cat PROD-2024_01_07_20_45_10.sql | docker exec -i --user postgres pos-db psql -U postgres -d dreamsbo
+cat PROD-2024_01_07_20_45_10.sql | docker exec -i --user postgres water-db psql -U postgres -d dreamsbo
 ```
 
 Copy folder

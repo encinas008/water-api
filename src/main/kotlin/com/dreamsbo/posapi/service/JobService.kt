@@ -25,7 +25,7 @@ class JobService(
     fun findAll(): List<JobOutputDto> {
         val jobs = mutableListOf<JobOutputDto>()
 
-        jobRepository.findAllByActive(true, Sort.by(Sort.Direction.DESC, "createdAt")).forEach {
+        jobRepository.findAllByActive(true, Sort.by(Sort.Direction.DESC, "startDate")).forEach {
             jobs.add(toJobOutputDto(it))
         }
 
@@ -37,7 +37,7 @@ class JobService(
     }
 
     fun findAllPaginated(page: Int, size: Int, search: String?, date: java.time.LocalDate? = null): Page<JobOutputDto> {
-        val pageable: Pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"))
+        val pageable: Pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "startDate"))
         
         val jobPage = when {
             !search.isNullOrBlank() && date != null -> {

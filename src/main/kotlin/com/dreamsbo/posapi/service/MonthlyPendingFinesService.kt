@@ -78,5 +78,35 @@ class MonthlyPendingFinesService(
         val now = LocalDate.now()
         return getMonthlyPendingFines(partnerId, now.monthValue, now.year)
     }
+
+    fun getAllUnpaidFines(partnerId: UUID): List<PendingFineDto> {
+        val paidFineIds = waterPaymentDetailRepository.findPaidFineIdsByPartner(partnerId)
+        
+        val jobAbsences = jobAttendanceRepository.findAbsencesByPartner(partnerId, true)
+            .filter { it.id !in paidFineIds }
+            .map { attendance ->
+                PendingFineDto(
+                    id = attendance.id,
+                    type = "TRABAJO",
+                    name = attendance.job.name,
+                    date = attendance.attendanceDate,
+                    fine = attendance.job.fine ?: BigDecimal.ZERO
+                )
+            }
+            
+        val meetingAbsences = meetingAttendanceRepository.findAbsencesByPartner(partnerId, true)
+            .filter { it.id !in paidFineIds }
+            .map { attendance ->
+                PendingFineDto(
+                    id = attendance.id,
+                    type = "REUNION",
+                    name = attendance.meeting.name,
+                    date = attendance.attendanceDate,
+                    fine = attendance.meeting.fine ?: BigDecimal.ZERO
+                )
+            }
+            
+        return jobAbsences + meetingAbsences
+    }
 }
 
