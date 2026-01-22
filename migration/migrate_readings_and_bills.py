@@ -106,7 +106,7 @@ def migrate_readings_and_bills():
             k = (int(float(scode)), mes_ocurr)
             if k not in multas_grouped: multas_grouped[k] = []
             multas_grouped[k].append({
-                'id': mid, 'amount': monto, 'paid': cobrado == 1, 'pay_date': fecha_p, 'motive_id': motive_id
+                'id': mid, 'amount': monto, 'paid': cobrado != 0, 'pay_date': fecha_p, 'motive_id': motive_id
             })
         except: continue
 
