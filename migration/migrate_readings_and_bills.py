@@ -97,7 +97,7 @@ def migrate_readings_and_bills():
     lite_cur.execute("""
         SELECT SOCIOCODIGO, MESYANIO, MULTAID, MONTO, COBRADO, FECHACOMPLETA, IDDelMotivo 
         FROM MultaAsignada
-        WHERE MULTAID NOT IN ('1', '2', '0')
+        WHERE MULTAID NOT IN ('1', '2', '0', '4')
     """)
     multas_grouped = {} # (socio_id, mes_ocurrencia) -> list of components
     for scode, mes_ocurr, mid, monto, cobrado, fecha_p, motive_id in lite_cur.fetchall():
@@ -116,7 +116,6 @@ def migrate_readings_and_bills():
         '13': 'Alcantarillado / Mantenimiento',
         '5': 'Exceso de Consumo de Agua',
         '3': 'Multa por mora',
-        # '4': 'Multa por AULL',
         '6': 'Multa aporte cordones'
     }
 

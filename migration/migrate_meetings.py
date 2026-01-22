@@ -44,22 +44,6 @@ def parse_spanish_date(date_str):
         pass
     return None
 
-def add_one_month(d):
-    if not d: return d
-    month = d.month + 1
-    year = d.year
-    if month > 12:
-        month = 1
-        year += 1
-    # Mantener el mismo día, pero ajustarlo si el mes siguiente tiene menos días
-    day = d.day
-    while day > 28:
-        try:
-            return datetime.date(year, month, day)
-        except ValueError:
-            day -= 1
-    return datetime.date(year, month, day)
-
 def migrate_meetings():
     print("Iniciando migración de Reuniones (CLASSIC y AULL)...")
     
@@ -99,10 +83,8 @@ def migrate_meetings():
 
     # 3. Migrar CLASSIC Meetings (Reunion)
     print("Migrando Reuniones CLASICAS...")
-    lite_cur.execute("SELECT ID, ASUNTO, DESCRIPCION, HORA, MINUTO, PERIODO, FECHA FROM Reunion")
     for mid, asunto, desc, hora, minuto, periodo, fecha_str in lite_cur.fetchall():
         m_date = parse_spanish_date(fecha_str) or datetime.date.today()
-        m_date = add_one_month(m_date)
         m_uuid = str(uuid.uuid4())
         meeting_map[(mid, 'CLASSIC')] = (m_uuid, m_date)
         
@@ -128,7 +110,6 @@ def migrate_meetings():
     lite_cur.execute("SELECT ID, NOMBRE, DESCRIPCION, FECHA FROM AULL")
     for aid, nombre, desc, fecha_str in lite_cur.fetchall():
         m_date = parse_spanish_date(fecha_str) or datetime.date.today()
-        m_date = add_one_month(m_date)
         m_uuid = str(uuid.uuid4())
         meeting_map[(aid, 'AULL')] = (m_uuid, m_date)
         

@@ -50,10 +50,14 @@ def migrate_bill_concepts_postgres_direct():
     concepts_inserted = 0
     bills_updated = 0
     
-    # Procesar en lotes o uno por uno (uno por uno es más seguro para la lógica de actualización)
+    # Procesar cada factura
     for b_id, p_id, bp_start, total, paid, remaining, status_id in bills:
         extra_amount = Decimal('0.00')
         concepts_to_add = []
+
+        # Obtener el monto actual de los conceptos que QUEDARON en la factura tras el DELETE inicial
+        pg_cur.execute("SELECT COALESCE(SUM(amount), 0) FROM bill_concept_item WHERE water_bill_id = %s", (b_id,))
+        current_bill_total = pg_cur.fetchone()[0]
 
         # A. Buscar trabajos (jobs) no asistidos en el mismo mes/año
         pg_cur.execute("""
@@ -88,7 +92,7 @@ def migrate_bill_concepts_postgres_direct():
             concepts_to_add.append((concept_name, fine))
             extra_amount += fine
 
-        # Si hay conceptos extras, insertarlos y actualizar la factura
+        # Insertar nuevos conceptos
         if concepts_to_add:
             for c_name, c_amount in concepts_to_add:
                 pg_cur.execute("""
@@ -97,29 +101,29 @@ def migrate_bill_concepts_postgres_direct():
                     ) VALUES (%s, %s, %s, %s, %s, True, NOW())
                 """, (str(uuid.uuid4()), b_id, c_name, c_amount, bp_start))
                 concepts_inserted += 1
-            
-            # Actualizar totales de la factura
-            new_total = total + extra_amount
-            
-            # Lógica de pago: 
-            # Si estaba pagada, asumimos que se pagó con todo y multas
-            if status_id == ID_STATUS_PAID:
-                new_paid = new_total
-                new_remaining = Decimal('0.00')
-            else:
-                new_paid = paid
-                new_remaining = remaining + extra_amount
-            
-            pg_cur.execute("""
-                UPDATE water_bill 
-                SET total_amount = %s, 
-                    paid_amount = %s, 
-                    remaining_balance = %s, 
-                    base_amount = %s 
-                WHERE water_bill_id = %s
-            """, (new_total, new_paid, new_remaining, new_total, b_id))
-            
-            bills_updated += 1
+        
+        # SIEMPRE actualizar totales de la factura para asegurar sincronía, incluso si no añadimos nada nuevo
+        # (porque el DELETE inicial pudo haber bajado el total)
+        new_total = current_bill_total + extra_amount
+        
+        # Lógica de pago: 
+        if status_id == ID_STATUS_PAID:
+            new_paid = new_total
+            new_remaining = Decimal('0.00')
+        else:
+            new_paid = paid
+            new_remaining = new_total - paid # El saldo restante es el nuevo total menos lo que ya se pagó
+        
+        pg_cur.execute("""
+            UPDATE water_bill 
+            SET total_amount = %s, 
+                paid_amount = %s, 
+                remaining_balance = %s, 
+                base_amount = %s 
+            WHERE water_bill_id = %s
+        """, (new_total, new_paid, new_remaining, new_total, b_id))
+        
+        bills_updated += 1
 
     pg_conn.commit()
     print("\nResumen de Migración Postgres-Directa:")

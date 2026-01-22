@@ -47,22 +47,6 @@ def parse_spanish_date(date_str):
         pass
     return None
 
-def add_one_month(d):
-    if not d: return d
-    month = d.month + 1
-    year = d.year
-    if month > 12:
-        month = 1
-        year += 1
-    # Mantener el mismo día, pero ajustarlo si el mes siguiente tiene menos días
-    day = d.day
-    while day > 28:
-        try:
-            return datetime.date(year, month, day)
-        except ValueError:
-            day -= 1
-    return datetime.date(year, month, day)
-
 def migrate_jobs():
     print("Iniciando migración de Trabajos (Jobs)...")
     
@@ -98,7 +82,6 @@ def migrate_jobs():
     job_map = {} 
     for t_id, nombre, descripcion, fecha_str in trabajos:
         j_date = parse_spanish_date(fecha_str) or datetime.date.today()
-        j_date = add_one_month(j_date)
         j_uuid = str(uuid.uuid4())
         job_map[t_id] = (j_uuid, j_date)
 
