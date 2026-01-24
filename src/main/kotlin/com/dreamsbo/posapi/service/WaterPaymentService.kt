@@ -64,12 +64,37 @@ class WaterPaymentService(
         var billAmount = input.amount // Monto de la factura (sin multas)
         
         if (input.includePendingFines && bill != null) {
-            pendingFines = monthlyPendingFinesService.getMonthlyPendingFines(
+            val allPendingFines = monthlyPendingFinesService.getMonthlyPendingFines(
                 input.partnerId, 
                 bill.billingPeriodStart.monthValue, 
                 bill.billingPeriodStart.year
             )
-            pendingFinesAmount = pendingFines.totalFines
+            
+            // Filtrar multas que ya están en la factura como conceptos (evitar doble cobro)
+            val billedConcepts = billConceptItemRepository.findByWaterBillIdAndActive(bill.id, true)
+            
+            val filteredJobs = allPendingFines.jobAbsences.filter { fine ->
+                billedConcepts.none { concept -> 
+                    concept.conceptName.contains(fine.name, ignoreCase = true) && 
+                    (concept.conceptName.contains("Multa", ignoreCase = true) || 
+                     concept.conceptName.contains("AULL", ignoreCase = true))
+                }
+            }
+            
+            val filteredMeetings = allPendingFines.meetingAbsences.filter { fine ->
+                billedConcepts.none { concept -> 
+                    concept.conceptName.contains(fine.name, ignoreCase = true) && 
+                    (concept.conceptName.contains("Multa", ignoreCase = true) || 
+                     concept.conceptName.contains("AULL", ignoreCase = true))
+                }
+            }
+
+            pendingFinesAmount = filteredJobs.sumOf { it.fine } + filteredMeetings.sumOf { it.fine }
+            pendingFines = allPendingFines.copy(
+                jobAbsences = filteredJobs,
+                meetingAbsences = filteredMeetings,
+                totalFines = pendingFinesAmount
+            )
             
             // El amount que viene del frontend ya incluye las multas cuando includePendingFines es true
             // Por lo tanto, el monto de la factura es el total menos las multas
