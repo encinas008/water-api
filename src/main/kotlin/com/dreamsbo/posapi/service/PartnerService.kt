@@ -42,10 +42,11 @@ class PartnerService(
 
     fun findAllPaginated(page: Int, size: Int, search: String?): Page<PartnerOutputDto> {
         val pageable: Pageable = if (search.isNullOrBlank()) {
-            PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"))
+            // Use multiple sort keys for deterministic results
+            PageRequest.of(page, size, Sort.by(Sort.Order.desc("createdAt"), Sort.Order.asc("partnerNumber")))
         } else {
-            // Respect custom ORDER BY in repository query
-            PageRequest.of(page, size, Sort.unsorted())
+            // Even with search, apply sorting to avoid ghost duplicates across pages
+            PageRequest.of(page, size, Sort.by(Sort.Order.asc("partnerNumber")))
         }
         
         val partnerPage = if (search.isNullOrBlank()) {

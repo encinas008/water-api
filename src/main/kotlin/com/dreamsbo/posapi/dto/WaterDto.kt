@@ -257,3 +257,22 @@ data class WaterBillDetailDto(
     val bill: WaterBillOutputDto,
     val payments: List<WaterPaymentOutputDto>
 )
+// Detailed Debt Report DTOs
+data class DetailedDebtItemDto(
+    val partnerId: UUID,
+    val partnerNumber: String,
+    val partnerName: String,
+    val date: LocalDate,
+    val concept: String,
+    val amount: BigDecimal,
+    val type: String // "BILL" or "FINE"
+)
+
+data class DetailedDebtorsReportDto(
+    val items: List<DetailedDebtItemDto>,
+    val totalDebt: BigDecimal,
+    val totalElements: Long,
+    val totalPages: Int,
+    val currentPage: Int,
+    val generatedAt: OffsetDateTime
+)

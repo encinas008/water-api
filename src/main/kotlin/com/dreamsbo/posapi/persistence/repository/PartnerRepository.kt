@@ -22,11 +22,28 @@ interface PartnerRepository : JpaRepository<PartnerEntity, UUID> {
     @Query("""
         SELECT p FROM PartnerEntity p 
         WHERE p.active = :active 
-        AND CAST(p.partnerNumber AS string) = :search
+        AND (
+            LOWER(p.fullName) LIKE LOWER(CONCAT('%', :search, '%')) 
+            OR CAST(p.partnerNumber AS string) LIKE CONCAT('%', :search, '%')
+        )
     """)
     fun findAllByActiveAndSearch(
         @Param("active") active: Boolean,
         @Param("search") search: String,
+        pageable: Pageable
+    ): Page<PartnerEntity>
+
+    @Query("SELECT SUM(p.currentDebt) FROM PartnerEntity p WHERE p.active = true")
+    fun sumTotalDebt(): java.math.BigDecimal?
+
+    @Query("""
+        SELECT DISTINCT p FROM PartnerEntity p 
+        LEFT JOIN WaterBillEntity b ON b.partner.id = p.id AND b.status.code IN ('PENDING', 'OVERDUE', 'PARTIAL_PAID') AND b.active = true
+        WHERE p.active = :active 
+        AND (p.currentDebt > 0 OR b.id IS NOT NULL)
+    """)
+    fun findAllDebtors(
+        @Param("active") active: Boolean,
         pageable: Pageable
     ): Page<PartnerEntity>
 

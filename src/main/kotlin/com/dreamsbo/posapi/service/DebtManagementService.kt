@@ -4,6 +4,7 @@ import com.dreamsbo.posapi.dto.DebtReportDto
 import com.dreamsbo.posapi.persistence.repository.PartnerRepository
 import com.dreamsbo.posapi.persistence.repository.WaterBillRepository
 import com.dreamsbo.posapi.persistence.repository.WaterPaymentRepository
+import com.dreamsbo.posapi.persistence.repository.BillConceptItemRepository
 import jakarta.transaction.Transactional
 import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
@@ -17,31 +18,42 @@ class DebtManagementService(
     private val waterBillRepository: WaterBillRepository,
     private val waterPaymentRepository: WaterPaymentRepository,
     private val monthlyPendingFinesService: MonthlyPendingFinesService,
+    private val billConceptItemRepository: BillConceptItemRepository,
 ) {
 
     fun calculateTotalDebt(partnerId: UUID): BigDecimal {
-        val bills = waterBillRepository.findByPartnerIdAndActive(partnerId, true, Sort.unsorted())
-        val pendingBills = bills.filter { it.status.code == "PENDING" }
+        // 1. Sum remaining balance of all unpaid bills (PENDING, OVERDUE, PARTIAL_PAID)
+        val unpaidBills = waterBillRepository.findByPartnerIdAndStatusCodesInAndActive(
+            partnerId, listOf("PENDING", "OVERDUE", "PARTIAL_PAID"), true
+        )
+        val billsDebt = unpaidBills.sumOf { it.remainingBalance }
+
+        // 2. Sum fines for months that don't have a PAID bill
+        // First, get months that ARE paid
+        val paidMonths = waterBillRepository.findByPartnerIdAndActive(partnerId, true, Sort.unsorted())
+            .filter { it.status.code == "PAID" }
+            .map { "${it.billingPeriodStart.monthValue}-${it.billingPeriodStart.year}" }
+            .toSet()
+
+        // Get all unpaid fines recorded in the system
+        val allUnpaidFines = monthlyPendingFinesService.getAllUnpaidFines(partnerId)
         
-        val billsDebt = pendingBills.sumOf { it.remainingBalance }
-            
-        // Sumar las multas de cada mes que tiene una factura pendiente
-        var totalFinesDebt = BigDecimal.ZERO
-        pendingBills.forEach { bill ->
-            val monthlyFines = monthlyPendingFinesService.getMonthlyPendingFines(
-                partnerId, 
-                bill.billingPeriodStart.monthValue, 
-                bill.billingPeriodStart.year
-            )
-            totalFinesDebt = totalFinesDebt.add(monthlyFines.totalFines)
+        // Filter out fines where the month is already settled via a PAID bill
+        // Also skip fines that are ALREADY included in a PENDING/OVERDUE bill to avoid double counting
+        val billedFineConcepts = unpaidBills.flatMap { bill ->
+            billConceptItemRepository.findByWaterBillIdAndActive(bill.id, true)
+                .map { it.conceptName.lowercase().trim() }
         }
-        
-        // También incluir multas del mes actual si no hay una factura pendiente para hoy aún
-        // o si queremos que siempre se vean las multas del mes en curso aunque no haya factura.
-        // Pero el requerimiento dice "si es diciembre solo multas de diciembre", lo cual sugiere
-        // que las multas van atadas a la factura del mes.
-        
-        return billsDebt.add(totalFinesDebt)
+
+        val unbilledFinesDebt = allUnpaidFines.filter { fine ->
+            val monthYear = "${fine.date.monthValue}-${fine.date.year}"
+            val isNotPaidMonth = !paidMonths.contains(monthYear)
+            val isNotYetBilled = billedFineConcepts.none { it.contains(fine.name.lowercase().trim()) }
+            
+            isNotPaidMonth && isNotYetBilled
+        }.sumOf { it.fine }
+
+        return billsDebt.add(unbilledFinesDebt)
     }
 
     fun getDebtorsList(): List<DebtReportDto> {

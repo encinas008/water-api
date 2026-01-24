@@ -15,6 +15,13 @@ import java.util.*
 interface WaterBillRepository : JpaRepository<WaterBillEntity, UUID> {
 
     fun findByPartnerIdAndActive(partnerId: UUID, active: Boolean, sort: Sort): List<WaterBillEntity>
+
+    @Query("SELECT b FROM WaterBillEntity b WHERE b.partner.id = :partnerId AND b.status.code IN :statusCodes AND b.active = :active")
+    fun findByPartnerIdAndStatusCodesInAndActive(
+        @Param("partnerId") partnerId: UUID,
+        @Param("statusCodes") statusCodes: List<String>,
+        @Param("active") active: Boolean
+    ): List<WaterBillEntity>
     
     @Query("SELECT COUNT(b) FROM WaterBillEntity b WHERE b.partner.id = :partnerId AND b.status.code IN ('PENDING', 'OVERDUE', 'PARTIAL_PAID') AND b.active = true")
     fun countUnpaidBillsByPartnerId(@Param("partnerId") partnerId: UUID): Long
@@ -87,4 +94,6 @@ interface WaterBillRepository : JpaRepository<WaterBillEntity, UUID> {
         @Param("currentDate") currentDate: LocalDate,
         @Param("active") active: Boolean
     ): List<Array<Any>>
+    @Query("SELECT SUM(b.remainingBalance) FROM WaterBillEntity b WHERE b.active = true AND b.status.code IN ('PENDING', 'OVERDUE', 'PARTIAL_PAID')")
+    fun sumTotalPendingBalance(): java.math.BigDecimal?
 }
