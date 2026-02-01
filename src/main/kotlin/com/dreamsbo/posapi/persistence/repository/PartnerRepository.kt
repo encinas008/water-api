@@ -24,7 +24,7 @@ interface PartnerRepository : JpaRepository<PartnerEntity, UUID> {
         WHERE p.active = :active 
         AND (
             LOWER(p.fullName) LIKE LOWER(CONCAT('%', :search, '%')) 
-            OR CAST(p.partnerNumber AS string) LIKE CONCAT('%', :search, '%')
+            OR CAST(p.partnerNumber AS string) = :search
         )
     """)
     fun findAllByActiveAndSearch(

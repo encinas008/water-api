@@ -81,7 +81,8 @@ data class CashBalanceMovementDto(
     val billNumber: String? = null,
     val partnerName: String? = null,
     val partnerNumber: String? = null,
-    val billingPeriod: String? = null // e.g. "Enero 2025"
+    val billingPeriod: String? = null, // e.g. "Enero 2025"
+    val correlativeNumber: Int? = null
 )
 
 data class CashBalanceMovementsOutputDto(

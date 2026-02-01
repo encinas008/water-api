@@ -1,0 +1,1 @@
+ALTER TABLE pos.cash_flow ADD COLUMN correlative_number INTEGER;

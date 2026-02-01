@@ -22,6 +22,7 @@ data class CashFlowOutputDto(
     val description: String,
     val amount: BigDecimal,
     val active: Boolean,
+    val correlativeNumber: Int? = null,
     val createdAt: OffsetDateTime,
     val updatedAt: OffsetDateTime?
 )

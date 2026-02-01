@@ -58,4 +58,20 @@ class ReportController(val reportService: ReportService) {
             .headers(headers)
             .body(pdfBytes)
     }
+
+    @GetMapping("/cash-flows/{id}/receipt-pdf")
+    fun downloadCashFlowReceiptPdf(@PathVariable id: UUID): ResponseEntity<ByteArray> {
+
+        val pdfBytes = reportService.generateCashFlowReceiptPdf(id)
+
+        val headers = HttpHeaders()
+        headers.contentType = MediaType.APPLICATION_PDF
+        headers.setContentDispositionFormData("inline", "comprobante_$id.pdf")
+        headers.cacheControl = "must-revalidate, post-check=0, pre-check=0"
+
+        return ResponseEntity
+            .ok()
+            .headers(headers)
+            .body(pdfBytes)
+    }
 }

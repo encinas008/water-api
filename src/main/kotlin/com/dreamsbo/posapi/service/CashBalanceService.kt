@@ -351,7 +351,8 @@ class CashBalanceService(
                     billNumber = it.waterBill?.billNumber,
                     partnerNumber = it.partner.partnerNumber?.toString(),
                     partnerName = it.partner.fullName,
-                    billingPeriod = billingPeriod
+                    billingPeriod = billingPeriod,
+                    correlativeNumber = it.correlativeNumber
                 )
             )
         }
@@ -367,7 +368,8 @@ class CashBalanceService(
                     amount = it.amount,
                     paymentMethod = it.paymentType.name,
                     date = it.createdAt,
-                    reference = null
+                    reference = null,
+                    correlativeNumber = it.correlativeNumber
                 )
             )
         }

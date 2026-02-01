@@ -6,6 +6,7 @@ import com.dreamsbo.posapi.dto.CashFlowOutputDto
 import com.dreamsbo.posapi.persistence.entity.CashFlowEntity
 import com.dreamsbo.posapi.persistence.repository.*
 import com.dreamsbo.posapi.util.DateUtil
+import jakarta.transaction.Transactional
 import org.springframework.stereotype.Service
 import java.math.BigDecimal
 import java.time.OffsetDateTime
@@ -44,6 +45,7 @@ class CashFlowService(
                     description = it.description,
                     amount = it.amount,
                     active = it.active,
+                    correlativeNumber = it.correlativeNumber,
                     createdAt = it.createdAt,
                     updatedAt = it.updatedAt
                 )
@@ -69,12 +71,14 @@ class CashFlowService(
                     description = it.description,
                     amount = it.amount,
                     active = it.active,
+                    correlativeNumber = it.correlativeNumber,
                     createdAt = it.createdAt,
                     updatedAt = it.updatedAt
                 )
             }
     }
 
+    @Transactional
     fun create(cashFlowInputDto: CashFlowInputDto): CashFlowOutputDto {
 
         val paymentTypeOptional = paymentTypeRepository.findById(cashFlowInputDto.paymentTypeId)
@@ -120,13 +124,23 @@ class CashFlowService(
             }
         }
 
+        // Obtener y actualizar el correlativo del balance si existe
+        var correlativeNumber: Int? = null
+        val cbLinked = cashBalanceRepository.findByIdLocked(cashBalance.get().id)
+            .orElseThrow { BadRequestException("No se pudo bloquear el balance de caja") }
+            
+        cbLinked.lastCorrelative += 1
+        correlativeNumber = cbLinked.lastCorrelative
+        cashBalanceRepository.save(cbLinked)
+
         val cashFlowSaved = cashFlowRepository.save(
             CashFlowEntity(
                 amount = cashFlowInputDto.amount,
                 description = cashFlowInputDto.description,
-                cashBalance = cashBalance.get(),
+                cashBalance = cbLinked,
                 cashFlowType = cashFlowTypeOptional.get(),
-                paymentType = paymentTypeOptional.get()
+                paymentType = paymentTypeOptional.get(),
+                correlativeNumber = correlativeNumber
             )
         )
 
@@ -139,6 +153,7 @@ class CashFlowService(
             description = cashFlowSaved.description,
             amount = cashFlowSaved.amount,
             active = cashFlowSaved.active,
+            correlativeNumber = cashFlowSaved.correlativeNumber,
             createdAt = cashFlowSaved.createdAt,
             updatedAt = cashFlowSaved.updatedAt
         )

@@ -33,6 +33,7 @@ class ReportService(
     val waterMeterReadingRepository: WaterMeterReadingRepository,
     val billConceptItemRepository: BillConceptItemRepository,
     val waterPaymentDetailRepository: com.dreamsbo.posapi.persistence.repository.WaterPaymentDetailRepository,
+    val cashFlowRepository: com.dreamsbo.posapi.persistence.repository.CashFlowRepository,
 ) {
 
     fun generateTicketKitchen(ticketKitchenInputDto: TicketKitchenInputDto): ByteArray? {
@@ -299,6 +300,32 @@ class ReportService(
             JREmptyDataSource()
         )
         
+        return JasperExportManager.exportReportToPdf(jasperPrint)
+    }
+
+    fun generateCashFlowReceiptPdf(cashFlowId: UUID): ByteArray {
+        val cashFlow = cashFlowRepository.findById(cashFlowId)
+            .orElseThrow { NotFoundEntityException("No se ha encontrado el movimiento. Id = $cashFlowId") }
+
+        val params: MutableMap<String, Any> = HashMap()
+        params["movementType"] = cashFlow.cashFlowType.name
+        params["amount"] = cashFlow.amount
+        params["amountInWords"] = numberToWords(cashFlow.amount)
+        params["description"] = cashFlow.description
+        params["date"] = formatPaymentDateTime(cashFlow.createdAt.toLocalDate())
+        params["userName"] = "${cashFlow.cashBalance.box.user.profile.name} ${cashFlow.cashBalance.box.user.profile.lastname}"
+        params["boxName"] = cashFlow.cashBalance.box.name
+        params["communityName"] = "COMUNIDAD GUADALUPE"
+        params["correlativeNumber"] = cashFlow.correlativeNumber ?: 0
+
+        val reportPath = "reports/cashFlowReceipt.jrxml"
+
+        val jasperPrint = JasperFillManager.fillReport(
+            JasperCompileManager.compileReport(reportPath),
+            params,
+            JREmptyDataSource()
+        )
+
         return JasperExportManager.exportReportToPdf(jasperPrint)
     }
 
