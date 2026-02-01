@@ -47,7 +47,10 @@ interface WaterBillRepository : JpaRepository<WaterBillEntity, UUID> {
     @Query("""
         SELECT b FROM WaterBillEntity b 
         WHERE b.active = :active 
-        AND CAST(b.partner.partnerNumber AS string) = :search
+        AND (
+            CAST(b.partner.partnerNumber AS string) LIKE CONCAT('%', :search, '%')
+            OR LOWER(b.partner.fullName) LIKE LOWER(CONCAT('%', :search, '%'))
+        )
     """)
     fun findAllByActiveAndSearch(
         @Param("active") active: Boolean,
@@ -70,7 +73,10 @@ interface WaterBillRepository : JpaRepository<WaterBillEntity, UUID> {
         SELECT b FROM WaterBillEntity b 
         WHERE b.active = :active 
         AND b.status.code = :statusCode
-        AND CAST(b.partner.partnerNumber AS string) = :search
+        AND (
+            CAST(b.partner.partnerNumber AS string) LIKE CONCAT('%', :search, '%')
+            OR LOWER(b.partner.fullName) LIKE LOWER(CONCAT('%', :search, '%'))
+        )
     """)
     fun findAllByActiveAndStatusAndSearch(
         @Param("active") active: Boolean,
@@ -81,18 +87,22 @@ interface WaterBillRepository : JpaRepository<WaterBillEntity, UUID> {
     @Query("""
         SELECT 
             COUNT(b),
-            SUM(CASE WHEN b.status.code = 'PENDING' THEN 1 ELSE 0 END),
-            SUM(CASE WHEN b.status.code IN ('OVERDUE', 'CANCELLED') AND b.dueDate < :currentDate AND b.status.code != 'PAID' THEN 1 ELSE 0 END),
+            SUM(CASE WHEN b.status.code IN ('PENDING', 'PARTIAL_PAID') THEN 1 ELSE 0 END),
+            SUM(CASE WHEN b.status.code IN ('OVERDUE') AND b.dueDate < :currentDate AND b.status.code != 'PAID' THEN 1 ELSE 0 END),
             SUM(CASE WHEN b.status.code = 'PAID' THEN 1 ELSE 0 END),
-            SUM(CASE WHEN b.status.code = 'PENDING' THEN b.remainingBalance ELSE 0 END),
+            SUM(CASE WHEN b.status.code IN ('PENDING', 'PARTIAL_PAID') THEN b.remainingBalance ELSE 0 END),
             SUM(CASE WHEN b.status.code IN ('OVERDUE') THEN b.remainingBalance ELSE 0 END),
             SUM(CASE WHEN b.status.code = 'PAID' THEN b.totalAmount ELSE 0 END)
         FROM WaterBillEntity b 
         WHERE b.active = :active
+        AND (:search IS NULL OR :search = '' OR CAST(b.partner.partnerNumber AS string) LIKE CONCAT('%', :search, '%') OR LOWER(b.partner.fullName) LIKE LOWER(CONCAT('%', :search, '%')))
+        AND (:statusCode IS NULL OR :statusCode = '' OR b.status.code = :statusCode)
     """)
     fun getBillStats(
         @Param("currentDate") currentDate: LocalDate,
-        @Param("active") active: Boolean
+        @Param("active") active: Boolean,
+        @Param("search") search: String?,
+        @Param("statusCode") statusCode: String?
     ): List<Array<Any>>
     @Query("SELECT SUM(b.remainingBalance) FROM WaterBillEntity b WHERE b.active = true AND b.status.code IN ('PENDING', 'OVERDUE', 'PARTIAL_PAID')")
     fun sumTotalPendingBalance(): java.math.BigDecimal?

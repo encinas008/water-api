@@ -65,8 +65,11 @@ class WaterBillingController(
     }
 
     @GetMapping("/summary")
-    fun getBillStats(): com.dreamsbo.posapi.dto.WaterBillStatsDto {
-        return waterBillingService.getBillStats()
+    fun getBillStats(
+        @RequestParam(required = false) search: String?,
+        @RequestParam(required = false) statusCode: String?
+    ): com.dreamsbo.posapi.dto.WaterBillStatsDto {
+        return waterBillingService.getBillStats(search, statusCode)
     }
 
     @PostMapping("/{id}/cancel")

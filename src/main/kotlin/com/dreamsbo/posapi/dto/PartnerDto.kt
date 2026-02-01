@@ -5,6 +5,8 @@ import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.util.*
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties
+
 data class PartnerOutputDto(
     val id: UUID,
     val partnerNumber: Long?,
@@ -45,6 +47,7 @@ data class PartnerInputDto(
     val userId: UUID? = null,
 )
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 data class PartnerUpdateDto(
     val fullName: String?,
     val partnerIdentificationNumber: String?,

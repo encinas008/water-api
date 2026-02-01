@@ -257,18 +257,18 @@ class WaterBillingService(
         return bills.map { toWaterBillOutputDto(it) }
     }
 
-    fun getBillStats(): WaterBillStatsDto {
-        val stats = waterBillRepository.getBillStats(LocalDate.now(), true).firstOrNull()
+    fun getBillStats(search: String? = null, statusCode: String? = null): WaterBillStatsDto {
+        val stats = waterBillRepository.getBillStats(LocalDate.now(), true, search, statusCode).firstOrNull()
 
         return if (stats != null) {
             WaterBillStatsDto(
-                totalBills = stats[0] as Long,
-                pendingBillsCount = stats[1] as Long,
-                overdueBillsCount = stats[2] as Long,
-                paidBillsCount = stats[3] as Long,
-                totalPendingAmount = stats[4] as BigDecimal? ?: BigDecimal.ZERO,
-                totalOverdueAmount = stats[5] as BigDecimal? ?: BigDecimal.ZERO,
-                totalPaidAmount = stats[6] as BigDecimal? ?: BigDecimal.ZERO
+                totalBills = stats[0] as? Long ?: 0L,
+                pendingBillsCount = stats[1] as? Long ?: 0L,
+                overdueBillsCount = stats[2] as? Long ?: 0L,
+                paidBillsCount = stats[3] as? Long ?: 0L,
+                totalPendingAmount = stats[4] as? BigDecimal ?: BigDecimal.ZERO,
+                totalOverdueAmount = stats[5] as? BigDecimal ?: BigDecimal.ZERO,
+                totalPaidAmount = stats[6] as? BigDecimal ?: BigDecimal.ZERO
             )
         } else {
             WaterBillStatsDto(

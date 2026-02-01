@@ -61,7 +61,7 @@ class GlobalExceptionHandler : ResponseEntityExceptionHandler() {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).build()
     }
 
-    @ExceptionHandler(value = [NotFoundException::class])
+    @ExceptionHandler(value = [NotFoundException::class, NotFoundEntityException::class])
     fun notFoundException(e: Exception): ResponseEntity<Any> {
 
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.message)

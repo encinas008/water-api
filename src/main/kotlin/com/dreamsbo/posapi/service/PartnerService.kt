@@ -83,11 +83,11 @@ class PartnerService(
             }
             
             // Validar que el número de medidor sea único (comparar en mayúsculas)
-            val existingPartner = partnerRepository.findByWaterMeterNumberAndActive(
+            val existingPartners = partnerRepository.findByWaterMeterNumberAndActive(
                 trimmedMeterNumber,
                 true
             )
-            if (existingPartner.isPresent) {
+            if (existingPartners.isNotEmpty()) {
                 throw BadRequestException("El número de medidor $trimmedMeterNumber ya está registrado para otro socio")
             }
             
@@ -167,13 +167,15 @@ class PartnerService(
                     throw BadRequestException("El número de medidor solo puede contener letras y números")
                 }
                 
-                // Validar que el número de medidor sea único (excepto para el socio actual, comparar en mayúsculas)
-                val existingPartner = partnerRepository.findByWaterMeterNumberAndActive(
-                    trimmedMeterNumber,
-                    true
-                )
-                if (existingPartner.isPresent && existingPartner.get().id != partner.id) {
-                    throw BadRequestException("El número de medidor $trimmedMeterNumber ya está registrado para otro socio")
+                // Validar que el número de medidor sea único solo si está cambiando
+                if (trimmedMeterNumber != partner.waterMeterNumber) {
+                    val existingPartners = partnerRepository.findByWaterMeterNumberAndActive(
+                        trimmedMeterNumber,
+                        true
+                    )
+                    if (existingPartners.isNotEmpty()) {
+                        throw BadRequestException("El número de medidor $trimmedMeterNumber ya está registrado para otro socio")
+                    }
                 }
                 partner.waterMeterNumber = trimmedMeterNumber
             } else {
@@ -285,11 +287,11 @@ class PartnerService(
         }
         // Convertir a mayúsculas para comparación
         val upperMeterNumber = waterMeterNumber.trim().uppercase()
-        val existingPartner = partnerRepository.findByWaterMeterNumberAndActive(
+        val existingPartners = partnerRepository.findByWaterMeterNumberAndActive(
             upperMeterNumber,
             true
         )
-        return existingPartner.isPresent && (excludePartnerId == null || existingPartner.get().id != excludePartnerId)
+        return existingPartners.any { excludePartnerId == null || it.id != excludePartnerId }
     }
 
     private fun toPartnerOutputDto(entity: PartnerEntity, lastPaymentId: UUID? = null): PartnerOutputDto {
