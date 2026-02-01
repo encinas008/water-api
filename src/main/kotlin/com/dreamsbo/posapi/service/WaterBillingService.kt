@@ -786,6 +786,14 @@ class WaterBillingService(
 
         val savedBill = waterBillRepository.save(bill)
 
+        // 5. Desactivar la lectura asociada si existe
+        // Esto permite que el usuario pueda volver a registrar una lectura para el mismo período
+        bill.reading?.let { reading ->
+            reading.active = false
+            reading.updatedAt = OffsetDateTime.now()
+            waterMeterReadingRepository.save(reading)
+        }
+
         // 4. Revertir impacto en la deuda del socio
         // Si estaba pagada, la deuda subió cuando se generó la factura y bajó cuando se pagó.
         // Al anular: 
