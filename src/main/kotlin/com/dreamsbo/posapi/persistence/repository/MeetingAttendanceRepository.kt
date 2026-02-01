@@ -41,5 +41,19 @@ interface MeetingAttendanceRepository : JpaRepository<MeetingAttendanceEntity, U
     // Obtener el primer registro de asistencia de un socio para una reunión (para determinar si está asignado)
     @Query("SELECT ma FROM MeetingAttendanceEntity ma WHERE ma.meeting.id = :meetingId AND ma.partner.id = :partnerId AND ma.active = :active ORDER BY ma.attendanceDate ASC")
     fun findFirstByMeetingIdAndPartnerId(@Param("meetingId") meetingId: UUID, @Param("partnerId") partnerId: UUID, @Param("active") active: Boolean): Optional<MeetingAttendanceEntity>
+
+    @Query("SELECT ma FROM MeetingAttendanceEntity ma WHERE ma.partner.id = :partnerId AND ma.attendanceDate BETWEEN :startDate AND :endDate AND ma.active = :active AND ma.meeting.active = :active AND (ma.present = false OR ma.lateFine > 0)")
+    fun findFinesByPartnerAndDateRange(
+        @Param("partnerId") partnerId: UUID,
+        @Param("startDate") startDate: LocalDate,
+        @Param("endDate") endDate: LocalDate,
+        @Param("active") active: Boolean
+    ): List<MeetingAttendanceEntity>
+
+    @Query("SELECT ma FROM MeetingAttendanceEntity ma WHERE ma.partner.id = :partnerId AND ma.active = :active AND ma.meeting.active = :active AND (ma.present = false OR ma.lateFine > 0)")
+    fun findFinesByPartner(
+        @Param("partnerId") partnerId: UUID,
+        @Param("active") active: Boolean
+    ): List<MeetingAttendanceEntity>
 }
 

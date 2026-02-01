@@ -42,6 +42,9 @@ data class MeetingAttendanceEntity(
     @Column(name = "check_out_time")
     var checkOutTime: OffsetDateTime? = null,
 
+    @Column(name = "late_fine", precision = 19, scale = 2)
+    var lateFine: java.math.BigDecimal = java.math.BigDecimal.ZERO,
+
     var createdAt: OffsetDateTime = OffsetDateTime.now(),
     var updatedAt: OffsetDateTime? = null,
     var active: Boolean = true,

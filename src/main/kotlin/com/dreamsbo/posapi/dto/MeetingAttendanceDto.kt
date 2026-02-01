@@ -16,6 +16,7 @@ data class MeetingAttendanceOutputDto(
     val present: Boolean,
     val checkInTime: OffsetDateTime?,
     val checkOutTime: OffsetDateTime?,
+    val lateFine: java.math.BigDecimal,
     val active: Boolean,
     val createdAt: OffsetDateTime,
     val updatedAt: OffsetDateTime?

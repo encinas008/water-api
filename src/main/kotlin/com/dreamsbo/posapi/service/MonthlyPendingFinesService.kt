@@ -46,16 +46,24 @@ class MonthlyPendingFinesService(
             )
         }
 
-        // Obtener ausencias de reuniones (filtrar pagadas)
-        val meetingAbsences = meetingAttendanceRepository.findAbsencesByPartnerAndDateRange(
+        // Obtener multas de reuniones (inasistencia o retraso)
+        val meetingAbsences = meetingAttendanceRepository.findFinesByPartnerAndDateRange(
             partnerId, startDate, endDate, true
         ).filter { it.id !in paidFineIds }
         .map { attendance ->
-            val fine = attendance.meeting.fine ?: BigDecimal.ZERO
+            // Si es falta, se usa la multa de la reunión. Si es retraso, se usa lateFine.
+            val fine = if (!attendance.present) {
+                attendance.meeting.fine
+            } else {
+                attendance.lateFine
+            }
+            
+            val typeExtra = if (attendance.present && attendance.lateFine > BigDecimal.ZERO) " (RETRASO)" else ""
+            
             PendingFineDto(
                 id = attendance.id,
                 type = "REUNION",
-                name = attendance.meeting.name,
+                name = attendance.meeting.name + typeExtra,
                 date = attendance.attendanceDate,
                 fine = fine
             )
@@ -94,15 +102,23 @@ class MonthlyPendingFinesService(
                 )
             }
             
-        val meetingAbsences = meetingAttendanceRepository.findAbsencesByPartner(partnerId, true)
+        val meetingAbsences = meetingAttendanceRepository.findFinesByPartner(partnerId, true)
             .filter { it.id !in paidFineIds }
             .map { attendance ->
+                val fine = if (!attendance.present) {
+                    attendance.meeting.fine
+                } else {
+                    attendance.lateFine
+                }
+                
+                val typeExtra = if (attendance.present && attendance.lateFine > BigDecimal.ZERO) " (RETRASO)" else ""
+                
                 PendingFineDto(
                     id = attendance.id,
                     type = "REUNION",
-                    name = attendance.meeting.name,
+                    name = attendance.meeting.name + typeExtra,
                     date = attendance.attendanceDate,
-                    fine = attendance.meeting.fine ?: BigDecimal.ZERO
+                    fine = fine
                 )
             }
             

@@ -37,6 +37,8 @@ class BillingConfigService(
                     "MULTA_EXCESO_M3" -> BigDecimal("5.0")
                     "APORTE_DEPORTE" -> BigDecimal("2.0")
                     "APORTE_OTB" -> BigDecimal("3.0")
+                    "MULTA_RETRASO_AULL" -> BigDecimal("5.0")
+                    "MULTA_RETRASO_CLASICO" -> BigDecimal("5.0")
                     else -> BigDecimal.ZERO
                 }
                 BillingConfigOutputDto(

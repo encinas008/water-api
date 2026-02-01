@@ -545,10 +545,37 @@ class WaterBillingService(
             )
         )
         
+        // --- NUEVA LÓGICA: Buscar multas de reuniones y trabajos del mes para incluirlas como conceptos ---
+        val monthlyFines = monthlyPendingFinesService.getMonthlyPendingFines(
+            bill.partner.id, 
+            assignedDate.monthValue, 
+            assignedDate.year
+        )
+        
+        val jobFines = monthlyFines.jobAbsences.map { fine ->
+            BillConceptItemEntity(
+                waterBill = bill,
+                conceptName = "Multa Trabajo: ${fine.name}",
+                assignedDate = assignedDate,
+                amount = fine.fine
+            )
+        }
+        
+        val meetingFines = monthlyFines.meetingAbsences.map { fine ->
+            BillConceptItemEntity(
+                waterBill = bill,
+                conceptName = "Multa Reunión: ${fine.name}",
+                assignedDate = assignedDate,
+                amount = fine.fine
+            )
+        }
+        
         // Combinar conceptos
         val allConcepts = mutableListOf<BillConceptItemEntity>()
         excessConcept?.let { allConcepts.add(it) }
         allConcepts.addAll(additionalConcepts)
+        allConcepts.addAll(jobFines)
+        allConcepts.addAll(meetingFines)
         
         billConceptItemRepository.saveAll(allConcepts)
         

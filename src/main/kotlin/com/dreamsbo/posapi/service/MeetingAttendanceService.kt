@@ -21,6 +21,7 @@ class MeetingAttendanceService(
     private val meetingAttendanceRepository: MeetingAttendanceRepository,
     private val meetingRepository: MeetingRepository,
     private val partnerRepository: PartnerRepository,
+    private val billingConfigService: BillingConfigService,
 ) {
 
     fun getAttendanceByMeeting(meetingId: UUID): List<MeetingAttendanceOutputDto> {
@@ -68,6 +69,14 @@ class MeetingAttendanceService(
                 attendance.checkInTime = partnerAttendance.checkInTime
                 attendance.checkOutTime = partnerAttendance.checkOutTime
                 attendance.updatedAt = OffsetDateTime.now()
+                
+                // Calcular multa por retraso si corresponde
+                if (attendance.present && attendance.checkInTime != null) {
+                    attendance.lateFine = calculateLateFine(meetingEntity.get(), attendance.checkInTime!!)
+                } else {
+                    attendance.lateFine = java.math.BigDecimal.ZERO
+                }
+                
                 val updated = meetingAttendanceRepository.save(attendance)
                 createdAttendances.add(toMeetingAttendanceOutputDto(updated))
             } else {
@@ -80,6 +89,12 @@ class MeetingAttendanceService(
                     checkInTime = partnerAttendance.checkInTime,
                     checkOutTime = partnerAttendance.checkOutTime
                 )
+                
+                // Calcular multa por retraso si corresponde
+                if (attendance.present && attendance.checkInTime != null) {
+                    attendance.lateFine = calculateLateFine(meetingEntity.get(), attendance.checkInTime!!)
+                }
+                
                 val saved = meetingAttendanceRepository.save(attendance)
                 createdAttendances.add(toMeetingAttendanceOutputDto(saved))
             }
@@ -101,6 +116,13 @@ class MeetingAttendanceService(
         input.checkInTime?.let { attendance.checkInTime = it }
         input.checkOutTime?.let { attendance.checkOutTime = it }
         attendance.updatedAt = OffsetDateTime.now()
+
+        // Recalcular multa por retraso
+        if (attendance.present && attendance.checkInTime != null) {
+            attendance.lateFine = calculateLateFine(attendance.meeting, attendance.checkInTime!!)
+        } else {
+            attendance.lateFine = java.math.BigDecimal.ZERO
+        }
 
         val updatedAttendance = meetingAttendanceRepository.save(attendance)
         return toMeetingAttendanceOutputDto(updatedAttendance)
@@ -259,10 +281,41 @@ class MeetingAttendanceService(
             present = entity.present,
             checkInTime = entity.checkInTime,
             checkOutTime = entity.checkOutTime,
+            lateFine = entity.lateFine,
             active = entity.active,
             createdAt = entity.createdAt,
             updatedAt = entity.updatedAt
         )
+    }
+
+    private fun calculateLateFine(meeting: MeetingEntity, checkInTime: OffsetDateTime): java.math.BigDecimal {
+        val meetingDate = meeting.meetingDate
+        var scheduledHour = meeting.hour
+        if (meeting.amPm == "PM" && scheduledHour < 12) scheduledHour += 12
+        if (meeting.amPm == "AM" && scheduledHour == 12) scheduledHour = 0
+        
+        val scheduledTime = OffsetDateTime.of(
+            meetingDate.year, meetingDate.monthValue, meetingDate.dayOfMonth,
+            scheduledHour, meeting.minute, 0, 0, checkInTime.offset
+        )
+        
+        val gracePeriodEnd = scheduledTime.plusMinutes(meeting.waitingMinutes.toLong())
+        
+        return if (checkInTime.isAfter(gracePeriodEnd)) {
+            val configKey = when (meeting.meetingType?.code) {
+                "AULL" -> "MULTA_RETRASO_AULL"
+                "CLASSIC" -> "MULTA_RETRASO_CLASICO"
+                else -> null
+            }
+            
+            if (configKey != null) {
+                billingConfigService.getConfigValue(configKey, java.math.BigDecimal("5.0"))
+            } else {
+                java.math.BigDecimal.ZERO
+            }
+        } else {
+            java.math.BigDecimal.ZERO
+        }
     }
 }
 
