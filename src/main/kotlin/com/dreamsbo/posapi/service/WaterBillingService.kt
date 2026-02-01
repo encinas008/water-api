@@ -752,7 +752,7 @@ class WaterBillingService(
 
                         cashFlowService.create(com.dreamsbo.posapi.dto.CashFlowInputDto(
                             amount = payment.amount,
-                            description = "Devolución por anulación de factura ${bill.billNumber}",
+                            description = "Devolución Socio ${bill.partner.partnerNumber ?: ""}: ${bill.partner.fullName} - Factura: ${bill.billNumber}",
                             userId = userId,
                             cashFlowTypeId = egresoType.id,
                             paymentTypeId = efectivoType.id

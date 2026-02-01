@@ -2,6 +2,7 @@ package com.dreamsbo.posapi.controller
 
 import com.dreamsbo.posapi.dto.CashBalanceDetailsOutputDto
 import com.dreamsbo.posapi.dto.CashBalanceInputDto
+import com.dreamsbo.posapi.dto.CashBalanceMovementsOutputDto
 import com.dreamsbo.posapi.dto.CashBalanceOutputDto
 import com.dreamsbo.posapi.dto.CloseCashBalanceInputDto
 import com.dreamsbo.posapi.service.CashBalanceService
@@ -70,4 +71,10 @@ class CashBalanceController(
     ): Page<CashBalanceOutputDto> {
         return cashBalanceService.findAllPaginated(page, size, search, userId)
     }
+
+    @GetMapping("/{id}/movements")
+    fun getMovements(@PathVariable("id") cashBalanceId: UUID): CashBalanceMovementsOutputDto {
+        return cashBalanceService.getMovements(cashBalanceId)
+    }
 }
+

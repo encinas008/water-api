@@ -68,3 +68,24 @@ data class CashBalanceDetailsOutputDto(
     val createdAt: OffsetDateTime,
     val updatedAt: OffsetDateTime?
 )
+
+data class CashBalanceMovementDto(
+    val id: UUID,
+    val type: String, // "INGRESO" or "EGRESO"
+    val category: String, // "COBRANZA" or "MANUAL"
+    val description: String,
+    val amount: BigDecimal,
+    val paymentMethod: String, // "EFECTIVO", "QR", etc.
+    val date: OffsetDateTime,
+    val reference: String? = null, // receipt number for payments
+    val billNumber: String? = null,
+    val partnerName: String? = null,
+    val partnerNumber: String? = null,
+    val billingPeriod: String? = null // e.g. "Enero 2025"
+)
+
+data class CashBalanceMovementsOutputDto(
+    val cashBalanceId: UUID,
+    val movements: List<CashBalanceMovementDto>
+)
+

@@ -324,4 +324,78 @@ class CashBalanceService(
             )
         }
     }
+
+    fun getMovements(cashBalanceId: UUID): CashBalanceMovementsOutputDto {
+        val movements = mutableListOf<CashBalanceMovementDto>()
+
+        // 1. Cobranzas (Water Payments)
+        waterPaymentRepository.findByCashBalanceId(cashBalanceId, true).forEach {
+            val billLabel = it.waterBill?.let { bill -> " - Factura: ${bill.billNumber}" } ?: ""
+            
+            // Período de facturación
+            val billingPeriod = it.waterBill?.let { bill ->
+                val month = getMonthName(bill.billingPeriodStart.monthValue)
+                "${month.replaceFirstChar { it.titlecase() }} ${bill.billingPeriodStart.year}"
+            }
+
+            movements.add(
+                CashBalanceMovementDto(
+                    id = it.id,
+                    type = "INGRESO",
+                    category = "COBRANZA",
+                    description = it.observation, // Usar observación si existe
+                    amount = it.amount,
+                    paymentMethod = it.paymentType.name,
+                    date = it.createdAt,
+                    reference = it.receiptNumber,
+                    billNumber = it.waterBill?.billNumber,
+                    partnerNumber = it.partner.partnerNumber?.toString(),
+                    partnerName = it.partner.fullName,
+                    billingPeriod = billingPeriod
+                )
+            )
+        }
+
+        // 2. Flujos Manuales (Cash Flows)
+        cashFlowRepository.findByCashBalanceIdAndActive(cashBalanceId, true).forEach {
+            movements.add(
+                CashBalanceMovementDto(
+                    id = it.id,
+                    type = it.cashFlowType.name.trim().uppercase(),
+                    category = "MANUAL",
+                    description = it.description,
+                    amount = it.amount,
+                    paymentMethod = it.paymentType.name,
+                    date = it.createdAt,
+                    reference = null
+                )
+            )
+        }
+
+        // Ordenar por fecha descendente
+        return CashBalanceMovementsOutputDto(
+            cashBalanceId = cashBalanceId,
+            movements = movements.sortedByDescending { it.date }
+        )
+    }
+
+    private fun getMonthName(month: Int): String {
+        return when (month) {
+            1 -> "enero"
+            2 -> "febrero"
+            3 -> "marzo"
+            4 -> "abril"
+            5 -> "mayo"
+            6 -> "junio"
+            7 -> "julio"
+            8 -> "agosto"
+            9 -> "septiembre"
+            10 -> "octubre"
+            11 -> "noviembre"
+            12 -> "diciembre"
+            else -> ""
+        }
+    }
 }
+
+
