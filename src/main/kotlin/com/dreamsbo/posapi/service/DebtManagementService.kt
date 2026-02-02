@@ -40,14 +40,23 @@ class DebtManagementService(
         
         // Filter out fines where the month is already settled via a PAID bill
         // Also skip fines that are ALREADY included in a PENDING/OVERDUE bill to avoid double counting
-        val billedFineConcepts = unpaidBills.flatMap { bill ->
-            billConceptItemRepository.findByWaterBillIdAndActive(bill.id, true)
-                .map { it.conceptName.lowercase().trim() }
+        
+        // OPTIMIZATION: Fetch ALL concepts for these bills in ONE query instead of N queries
+        val billIds = unpaidBills.map { it.id }
+        val allConcepts = if (billIds.isNotEmpty()) {
+            billConceptItemRepository.findByWaterBillIdInAndActive(billIds, true)
+        } else {
+            emptyList()
         }
+        
+        // Create a set of concept names (normalized)
+        val billedFineConcepts = allConcepts.map { it.conceptName.lowercase().trim() }.toSet()
 
         val unbilledFinesDebt = allUnpaidFines.filter { fine ->
             val monthYear = "${fine.date.monthValue}-${fine.date.year}"
             val isNotPaidMonth = !paidMonths.contains(monthYear)
+            
+            // Optimization: check against the Set of concepts
             val isNotYetBilled = billedFineConcepts.none { it.contains(fine.name.lowercase().trim()) }
             
             isNotPaidMonth && isNotYetBilled
@@ -86,7 +95,6 @@ class DebtManagementService(
                     totalDebt = currentDebt,
                     pendingBillsCount = pendingBills.size,
                     overdueBillsCount = overdueBills.size,
-                    oldestDebtDate = oldestBill?.billingPeriodStart,
                     connectionStatus = partner.connectionStatus?.name ?: "N/A",
                     lastPaymentDate = lastPaymentDate,
                     contactPhone = partner.cellphone
@@ -98,6 +106,55 @@ class DebtManagementService(
 
     fun getDebtorsWithOverdueBills(): List<DebtReportDto> {
         return getDebtorsList().filter { it.overdueBillsCount > 0 }
+    }
+
+    fun getCutoffCandidatesList(): List<DebtReportDto> {
+        // 1. Get only partners with 4+ pending bills directly from DB (FAST)
+        val candidateIds = waterBillRepository.findPartnerIdsWithPendingBillsCount(4)
+        
+        if (candidateIds.isEmpty()) {
+            return emptyList()
+        }
+
+        // 2. Load full data only for candidates (Efficiency: O(Candidates) instead of O(All Partners))
+        val candidates = partnerRepository.findAllById(candidateIds)
+        
+        return candidates.map { partner ->
+            val bills = waterBillRepository.findByPartnerIdAndActive(partner.id, true, Sort.unsorted())
+            val pendingBills = bills.filter { it.status.code in listOf("PENDING", "PARTIAL_PAID", "OVERDUE") }
+            val overdueBills = bills.filter { 
+                it.status.code == "OVERDUE" || (it.dueDate.isBefore(LocalDate.now()) && it.status.code != "PAID") 
+            }
+            
+            // Re-check count (just in case status code logic differs slightly in Kotlin vs SQL)
+            if (pendingBills.size < 4) return@map null
+
+            val currentDebt = calculateTotalDebt(partner.id)
+            
+            val oldestBill = bills
+                .filter { it.status.code != "PAID" }
+                .minByOrNull { it.billingPeriodStart }
+            
+            val payments = waterPaymentRepository.findByPartnerIdAndActive(
+                partner.id, 
+                true, 
+                Sort.by(Sort.Direction.DESC, "paymentDate")
+            )
+            val lastPaymentDate = payments.firstOrNull()?.paymentDate
+
+            DebtReportDto(
+                partnerId = partner.id,
+                partnerName = partner.fullName,
+                partnerIdentificationNumber = partner.partnerIdentificationNumber,
+                totalDebt = currentDebt,
+                pendingBillsCount = pendingBills.size,
+                overdueBillsCount = overdueBills.size,
+                connectionStatus = partner.connectionStatus?.name ?: "N/A",
+                lastPaymentDate = lastPaymentDate,
+                contactPhone = partner.cellphone
+            )
+        }.filterNotNull()
+         .sortedByDescending { it.totalDebt }
     }
 
     @Transactional

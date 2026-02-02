@@ -106,4 +106,7 @@ interface WaterBillRepository : JpaRepository<WaterBillEntity, UUID> {
     ): List<Array<Any>>
     @Query("SELECT SUM(b.remainingBalance) FROM WaterBillEntity b WHERE b.active = true AND b.status.code IN ('PENDING', 'OVERDUE', 'PARTIAL_PAID')")
     fun sumTotalPendingBalance(): java.math.BigDecimal?
+
+    @Query("SELECT b.partner.id FROM WaterBillEntity b WHERE b.active = true AND b.status.code IN ('PENDING', 'OVERDUE', 'PARTIAL_PAID') GROUP BY b.partner.id HAVING COUNT(b.id) >= :minCount")
+    fun findPartnerIdsWithPendingBillsCount(@Param("minCount") minCount: Long): List<UUID>
 }

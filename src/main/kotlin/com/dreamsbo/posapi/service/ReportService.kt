@@ -22,6 +22,12 @@ import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
 import java.util.*
+import com.dreamsbo.posapi.dto.DailyMovementReportDto
+import com.dreamsbo.posapi.dto.MovementConceptDto
+import com.dreamsbo.posapi.dto.MonthlyReadingsReportDto
+import com.dreamsbo.posapi.dto.MonthlyReadingItemDto
+import com.dreamsbo.posapi.dto.PartnerStatusReportDto
+import com.dreamsbo.posapi.dto.PartnerStatusItemDto
 
 @Service
 class ReportService(
@@ -157,6 +163,10 @@ class ReportService(
         return debtManagementService.getDebtorsWithOverdueBills()
     }
 
+    fun getCutoffCandidatesReport(): List<DebtReportDto> {
+        return debtManagementService.getCutoffCandidatesList()
+    }
+
     fun getPendingReadingsReport(): List<PendingReadingsReportDto> {
         val partners = partnerRepository.findAllByActive(true, Sort.unsorted())
         val currentDate = LocalDate.now()
@@ -198,6 +208,179 @@ class ReportService(
                 "paidAmount" to bill.paidAmount
             )
         }.reversed()
+    }
+
+    fun getMovementReport(startDate: LocalDate, endDate: LocalDate): DailyMovementReportDto {
+        val incomeByConcept = mutableMapOf<String, BigDecimal>()
+        val expenseByConcept = mutableMapOf<String, BigDecimal>()
+
+        // 1. Water Payments
+        val payments = waterPaymentRepository.findByPaymentDateBetweenAndActive(startDate, endDate, true, Sort.by("paymentDate", "createdAt"))
+
+        payments.forEach { payment ->
+            val fines = waterPaymentDetailRepository.findByWaterPaymentIdAndActive(payment.id, true)
+            var totalFines = BigDecimal.ZERO
+
+            fines.forEach { fine ->
+                val name = "MULTA: ${fine.fineName}"
+                incomeByConcept[name] = (incomeByConcept[name] ?: BigDecimal.ZERO).add(fine.fineAmount)
+                totalFines = totalFines.add(fine.fineAmount)
+            }
+
+            val basePaid = payment.amount.subtract(totalFines)
+            if (basePaid > BigDecimal.ZERO) {
+                val bill = payment.waterBill
+                if (bill != null) {
+                    // Distribution logic
+                    val otherPayments = waterPaymentRepository.findByWaterBillIdAndActive(bill.id, true)
+                        .filter {
+                            it.id != payment.id && (it.paymentDate.isBefore(payment.paymentDate) ||
+                                (it.paymentDate == payment.paymentDate && it.createdAt.isBefore(payment.createdAt)))
+                        }
+
+                    var offset = otherPayments.sumOf { p ->
+                        val pFines = waterPaymentDetailRepository.findByWaterPaymentIdAndActive(p.id, true)
+                        val fSum = pFines.sumOf { it.fineAmount }
+                        p.amount.subtract(fSum)
+                    }
+
+                    val concepts = billConceptItemRepository.findByWaterBillIdAndActive(bill.id, true)
+                        .sortedWith { o1, o2 -> getConceptPriority(o1.conceptName).compareTo(getConceptPriority(o2.conceptName)) }
+
+                    var rem = basePaid
+                    concepts.forEach { concept ->
+                        val conceptAmt = concept.amount
+                        val fromOffset = if (offset > BigDecimal.ZERO) {
+                            if (offset >= conceptAmt) conceptAmt else offset
+                        } else BigDecimal.ZERO
+
+                        offset = offset.subtract(fromOffset)
+                        val remainingConcept = conceptAmt.subtract(fromOffset)
+
+                        if (remainingConcept > BigDecimal.ZERO && rem > BigDecimal.ZERO) {
+                            val toPay = if (rem >= remainingConcept) remainingConcept else rem
+                            incomeByConcept[concept.conceptName] = (incomeByConcept[concept.conceptName] ?: BigDecimal.ZERO).add(toPay)
+                            rem = rem.subtract(toPay)
+                        }
+                    }
+
+                    if (rem > BigDecimal.ZERO) {
+                        incomeByConcept["OTROS INGRESOS AGUA"] = (incomeByConcept["OTROS INGRESOS AGUA"] ?: BigDecimal.ZERO).add(rem)
+                    }
+                } else {
+                    incomeByConcept["INSTALACIÓN / OTROS"] = (incomeByConcept["INSTALACIÓN / OTROS"] ?: BigDecimal.ZERO).add(basePaid)
+                }
+            }
+        }
+
+        // 2. Cash Flows (Manual)
+        val startDT = startDate.atStartOfDay().atOffset(ZoneOffset.ofHours(-4))
+        val endDT = endDate.plusDays(1).atStartOfDay().atOffset(ZoneOffset.ofHours(-4))
+        val cashFlows = cashFlowRepository.findByCreatedAtBetweenAndActive(startDT, endDT, true, Sort.by("createdAt"))
+
+        cashFlows.forEach { cf ->
+            val category = cf.cashFlowType.name // "INGRESO" or "EGRESO"
+            val name = "MANUAL: ${cf.description}"
+            if (category == "INGRESO") {
+                incomeByConcept[name] = (incomeByConcept[name] ?: BigDecimal.ZERO).add(cf.amount)
+            } else {
+                expenseByConcept[name] = (expenseByConcept[name] ?: BigDecimal.ZERO).add(cf.amount)
+            }
+        }
+
+        val conceptsList = mutableListOf<MovementConceptDto>()
+
+        incomeByConcept.forEach { (name, amount) ->
+            conceptsList.add(MovementConceptDto(name, "INGRESO", amount, name.startsWith("MANUAL:")))
+        }
+
+        expenseByConcept.forEach { (name, amount) ->
+            conceptsList.add(MovementConceptDto(name, "EGRESO", amount, name.startsWith("MANUAL:")))
+        }
+
+        val totalIncome = incomeByConcept.values.fold(BigDecimal.ZERO, BigDecimal::add)
+        val totalExpense = expenseByConcept.values.fold(BigDecimal.ZERO, BigDecimal::add)
+
+        return DailyMovementReportDto(
+            concepts = conceptsList.sortedBy { it.type },
+            totalIncome = totalIncome,
+            totalExpense = totalExpense,
+            grandTotal = totalIncome.subtract(totalExpense)
+        )
+    }
+
+    fun getMonthlyReadingsReport(year: Int, month: Int): MonthlyReadingsReportDto {
+        val startDate = LocalDate.of(year, month, 1)
+        val endDate = startDate.plusMonths(1).minusDays(1)
+
+        val readings = waterMeterReadingRepository.findByReadingDateBetweenAndActive(
+            startDate, endDate, true
+        ).sortedBy { it.partner.partnerNumber }
+
+        val items = readings.map { reading ->
+            MonthlyReadingItemDto(
+                partnerNumber = reading.partner.partnerNumber,
+                partnerName = reading.partner.fullName,
+                readingValue = reading.currentReading,
+                readingDate = reading.readingDate
+            )
+        }
+
+        return MonthlyReadingsReportDto(
+            year = year,
+            month = month,
+            monthName = getMonthName(month).uppercase(),
+            readings = items
+        )
+    }
+
+    fun getMissingReadingsReport(year: Int, month: Int): List<MissingReadingItemDto> {
+        // 1. All active partners
+        val partners = partnerRepository.findAllByActive(true, Sort.by("partnerNumber"))
+
+        // 2. Readings for the target month
+        val startDate = LocalDate.of(year, month, 1)
+        val endDate = startDate.plusMonths(1).minusDays(1)
+        val readingsInMonth = waterMeterReadingRepository.findByReadingDateBetweenAndActive(startDate, endDate, true)
+        val partnersWithReading = readingsInMonth.map { it.partner.id }.toSet()
+
+        // 3. Filter missing
+        val missingPartners = partners.filter { !partnersWithReading.contains(it.id) }
+
+        // 4. Map to DTO
+        return missingPartners.map { partner ->
+            val latestReading = waterMeterReadingRepository.findLatestByPartnerId(partner.id, true)
+            
+            MissingReadingItemDto(
+                partnerId = partner.id,
+                partnerNumber = partner.partnerNumber,
+                partnerName = partner.fullName,
+                waterMeterNumber = partner.waterMeterNumber,
+                previousReading = latestReading.map { it.currentReading }.orElse(null),
+                previousReadingDate = latestReading.map { it.readingDate }.orElse(null)
+            )
+        }
+    }
+
+    fun getPartnerStatusReport(): PartnerStatusReportDto {
+        val partners = partnerRepository.findAllByActive(true, Sort.by("partnerNumber"))
+
+        val statusSummary = partners.groupBy { it.connectionStatus?.name ?: "SIN ESTADO" }
+            .mapValues { it.value.size }
+
+        val results = partners.map { partner ->
+            PartnerStatusItemDto(
+                partnerNumber = partner.partnerNumber,
+                fullName = partner.fullName,
+                identificationNumber = partner.partnerIdentificationNumber,
+                address = partner.waterConnectionAddress ?: partner.address,
+                currentDebt = partner.currentDebt,
+                statusName = partner.connectionStatus?.name ?: "SIN ESTADO",
+                statusCode = partner.connectionStatus?.code ?: "NONE"
+            )
+        }
+
+        return PartnerStatusReportDto(statusSummary, results)
     }
 
     // Water Payment Receipt PDF Generation

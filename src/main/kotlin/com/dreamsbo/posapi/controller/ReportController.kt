@@ -10,12 +10,56 @@ import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
+import java.time.LocalDate
 import java.util.UUID
+import com.dreamsbo.posapi.dto.DailyMovementReportDto
+import com.dreamsbo.posapi.dto.DebtReportDto
+import com.dreamsbo.posapi.dto.MonthlyReadingsReportDto
+import com.dreamsbo.posapi.dto.PartnerStatusReportDto
+import com.dreamsbo.posapi.dto.MissingReadingItemDto
 
 @RestController
 @RequestMapping("/reports")
 class ReportController(val reportService: ReportService) {
+
+    @GetMapping("/movements")
+    fun getMovementReport(
+        @RequestParam startDate: String,
+        @RequestParam endDate: String
+    ): DailyMovementReportDto {
+        return reportService.getMovementReport(
+            LocalDate.parse(startDate),
+            LocalDate.parse(endDate)
+        )
+    }
+
+    @GetMapping("/readings")
+    fun getMonthlyReadingsReport(
+        @RequestParam year: Int,
+        @RequestParam month: Int
+    ): MonthlyReadingsReportDto {
+        return reportService.getMonthlyReadingsReport(year, month)
+    }
+
+    @GetMapping("/missing-readings")
+    fun getMissingReadingsReport(
+        @RequestParam year: Int,
+        @RequestParam month: Int
+    ): List<MissingReadingItemDto> {
+        return reportService.getMissingReadingsReport(year, month)
+    }
+
+    @GetMapping("/partners-status")
+    fun getPartnerStatusReport(): PartnerStatusReportDto {
+        return reportService.getPartnerStatusReport()
+    }
+
+    @GetMapping("/cutoff-candidates")
+    fun getCutoffCandidatesReport(): List<DebtReportDto> {
+        return reportService.getCutoffCandidatesReport()
+    }
 
     @PostMapping("/kitchen")
     fun getTicketKitchenReport(@RequestBody ticketKitchenInputDto: TicketKitchenInputDto): ResponseEntity<ByteArray> {

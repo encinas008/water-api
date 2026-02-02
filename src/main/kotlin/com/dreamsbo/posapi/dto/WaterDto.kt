@@ -191,7 +191,6 @@ data class DebtReportDto(
     val totalDebt: BigDecimal,
     val pendingBillsCount: Int,
     val overdueBillsCount: Int,
-    val oldestDebtDate: LocalDate?,
     val connectionStatus: String,
     val lastPaymentDate: LocalDate?,
     val contactPhone: String?
@@ -275,4 +274,42 @@ data class DetailedDebtorsReportDto(
     val totalPages: Int,
     val currentPage: Int,
     val generatedAt: OffsetDateTime
+)
+
+data class MonthlyReadingItemDto(
+    val partnerNumber: Long?,
+    val partnerName: String,
+    val readingValue: BigDecimal,
+    val readingDate: LocalDate
+)
+
+data class MonthlyReadingsReportDto(
+    val year: Int,
+    val month: Int,
+    val monthName: String,
+    val readings: List<MonthlyReadingItemDto>
+)
+
+data class PartnerStatusItemDto(
+    val partnerNumber: Long?,
+    val fullName: String,
+    val identificationNumber: String?,
+    val address: String?,
+    val currentDebt: BigDecimal,
+    val statusName: String,
+    val statusCode: String
+)
+
+data class PartnerStatusReportDto(
+    val statusSummary: Map<String, Int>,
+    val results: List<PartnerStatusItemDto>
+)
+
+data class MissingReadingItemDto(
+    val partnerId: UUID,
+    val partnerNumber: Long?,
+    val partnerName: String,
+    val waterMeterNumber: String?,
+    val previousReading: BigDecimal?,
+    val previousReadingDate: LocalDate?
 )

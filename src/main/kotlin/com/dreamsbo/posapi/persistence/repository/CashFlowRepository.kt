@@ -22,4 +22,11 @@ interface CashFlowRepository : JpaRepository<CashFlowEntity, UUID> {
     fun findByCashBalanceIdAndActive(cashBalanceId: UUID, active: Boolean): List<CashFlowEntity>
 
     fun findByCashBalanceId(cashBalanceId: UUID): List<CashFlowEntity>
+
+    fun findByCreatedAtBetweenAndActive(
+        startDate: OffsetDateTime,
+        endDate: OffsetDateTime,
+        active: Boolean,
+        sort: Sort
+    ): List<CashFlowEntity>
 }

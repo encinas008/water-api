@@ -8,6 +8,8 @@ import java.util.*
 @Repository
 interface BillConceptItemRepository : JpaRepository<BillConceptItemEntity, UUID> {
     fun findByWaterBillIdAndActive(waterBillId: UUID, active: Boolean): List<BillConceptItemEntity>
+    
+    fun findByWaterBillIdInAndActive(waterBillIds: List<UUID>, active: Boolean): List<BillConceptItemEntity>
 }
 
 
