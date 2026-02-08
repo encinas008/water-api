@@ -11,4 +11,6 @@ interface UserRepository : JpaRepository<UserEntity, UUID> {
     fun findByUsernameAndPassword(username: String, password: String): Optional<UserEntity>
 
     fun findByUsername(username: String?): Optional<UserEntity>
+
+    fun countByActive(active: Boolean): Long
 }

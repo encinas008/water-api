@@ -7,6 +7,9 @@ import com.dreamsbo.posapi.persistence.repository.WaterBillRepository
 import com.dreamsbo.posapi.persistence.repository.WaterMeterReadingRepository
 import com.dreamsbo.posapi.persistence.repository.WaterPaymentRepository
 import com.dreamsbo.posapi.persistence.repository.BillConceptItemRepository
+import com.dreamsbo.posapi.persistence.repository.JobRepository
+import com.dreamsbo.posapi.persistence.repository.MeetingRepository
+import com.dreamsbo.posapi.persistence.repository.UserRepository
 import com.dreamsbo.posapi.util.DateUtil
 import net.sf.jasperreports.engine.JREmptyDataSource
 import net.sf.jasperreports.engine.JasperCompileManager
@@ -40,6 +43,10 @@ class ReportService(
     val billConceptItemRepository: BillConceptItemRepository,
     val waterPaymentDetailRepository: com.dreamsbo.posapi.persistence.repository.WaterPaymentDetailRepository,
     val cashFlowRepository: com.dreamsbo.posapi.persistence.repository.CashFlowRepository,
+    val jobRepository: JobRepository,
+    val meetingRepository: MeetingRepository,
+    val userRepository: UserRepository,
+    val billingConfigService: BillingConfigService,
 ) {
 
     fun generateTicketKitchen(ticketKitchenInputDto: TicketKitchenInputDto): ByteArray? {
@@ -356,8 +363,8 @@ class ReportService(
                 partnerNumber = partner.partnerNumber,
                 partnerName = partner.fullName,
                 waterMeterNumber = partner.waterMeterNumber,
-                previousReading = latestReading.map { it.currentReading }.orElse(null),
-                previousReadingDate = latestReading.map { it.readingDate }.orElse(null)
+                lastReading = latestReading.map { it.currentReading }.orElse(null),
+                lastReadingDate = latestReading.map { it.readingDate }.orElse(null)
             )
         }
     }
@@ -366,7 +373,7 @@ class ReportService(
         val partners = partnerRepository.findAllByActive(true, Sort.by("partnerNumber"))
 
         val statusSummary = partners.groupBy { it.connectionStatus?.name ?: "SIN ESTADO" }
-            .mapValues { it.value.size }
+            .mapValues { it.value.size.toLong() }
 
         val results = partners.map { partner ->
             PartnerStatusItemDto(
@@ -381,6 +388,162 @@ class ReportService(
         }
 
         return PartnerStatusReportDto(statusSummary, results)
+    }
+
+    fun getDashboardStats(yearParam: Int?): DashboardStatsDto {
+        val totalPartners = partnerRepository.countByActive(true)
+        val totalReadings = waterMeterReadingRepository.countByActive(true)
+        val totalMeetings = meetingRepository.countByActive(true)
+        val totalJobs = jobRepository.countByActive(true)
+        val totalUsers = userRepository.countByActive(true)
+
+        // Monthly consumption
+        val (startDate, endDate) = if (yearParam == null) {
+            // Last 12 months
+            val end = LocalDate.now().withDayOfMonth(1).plusMonths(1).minusDays(1)
+            val start = end.minusMonths(12).withDayOfMonth(1)
+            Pair(start, end)
+        } else {
+            // Specific year
+            val start = LocalDate.of(yearParam, 1, 1)
+            val end = LocalDate.of(yearParam, 12, 31)
+            Pair(start, end)
+        }
+        
+        val readings = waterMeterReadingRepository.findByReadingDateBetweenAndActive(startDate, endDate, true)
+        
+        val monthlyData = if (yearParam != null) {
+            // Ensure all 12 months of the year are present
+            (1..12).map { monthNum ->
+                val monthReadings = readings.filter { it.readingDate.monthValue == monthNum }
+                MonthlyConsumptionDto(
+                    month = "${getMonthName(monthNum).substring(0, 3).uppercase()} $yearParam",
+                    consumption = monthReadings.sumOf { it.consumption }
+                )
+            }
+        } else {
+            // Last 12 months (current logic)
+            readings
+                .groupBy { "${it.readingDate.year}-${it.readingDate.monthValue}" }
+                .map { (key, list) ->
+                    val year = key.split("-")[0].toInt()
+                    val month = key.split("-")[1].toInt()
+                    MonthlyConsumptionDto(
+                        month = "${getMonthName(month).substring(0, 3).uppercase()} $year",
+                        consumption = list.sumOf { it.consumption }
+                    )
+                }
+                .sortedWith(compareBy({ it.month.split(" ")[1].toInt() }, { getMonthNumber(it.month.split(" ")[0]) }))
+        }
+
+        return DashboardStatsDto(
+            totalPartners = totalPartners,
+            totalReadings = totalReadings,
+            totalMeetings = totalMeetings,
+            totalJobs = totalJobs,
+            totalUsers = totalUsers,
+            monthlyConsumption = monthlyData
+        )
+    }
+
+    fun getPartnerConsumptionStats(partnerId: UUID, yearParam: Int?): PartnerConsumptionStatsDto {
+        val partner = partnerRepository.findById(partnerId)
+            .orElseThrow { NotFoundEntityException("Socio no encontrado") }
+
+        val (startDate, endDate) = if (yearParam == null) {
+            // Last 12 months
+            val end = LocalDate.now().withDayOfMonth(1).plusMonths(1).minusDays(1)
+            val start = end.minusMonths(12).withDayOfMonth(1)
+            Pair(start, end)
+        } else {
+            // Specific year
+            val start = LocalDate.of(yearParam, 1, 1)
+            val end = LocalDate.of(yearParam, 12, 31)
+            Pair(start, end)
+        }
+        
+        val readings = waterMeterReadingRepository.findByReadingDateBetweenAndActive(startDate, endDate, true)
+            .filter { it.partner.id == partnerId }
+        
+        val monthlyData = if (yearParam != null) {
+            // Ensure all 12 months of the year are present
+            (1..12).map { monthNum ->
+                val monthReadings = readings.filter { it.readingDate.monthValue == monthNum }
+                MonthlyConsumptionDto(
+                    month = "${getMonthName(monthNum).substring(0, 3).uppercase()} $yearParam",
+                    consumption = monthReadings.sumOf { it.consumption }
+                )
+            }
+        } else {
+            // Last 12 months (current logic)
+            readings
+                .groupBy { "${it.readingDate.year}-${it.readingDate.monthValue}" }
+                .map { (key, list) ->
+                    val year = key.split("-")[0].toInt()
+                    val month = key.split("-")[1].toInt()
+                    MonthlyConsumptionDto(
+                        month = "${getMonthName(month).substring(0, 3).uppercase()} $year",
+                        consumption = list.sumOf { it.consumption }
+                    )
+                }
+                .sortedWith(compareBy({ it.month.split(" ")[1].toInt() }, { getMonthNumber(it.month.split(" ")[0]) }))
+        }
+
+        return PartnerConsumptionStatsDto(
+            partnerId = partner.id,
+            partnerName = partner.fullName,
+            partnerNumber = partner.partnerNumber?.toInt() ?: 0,
+            monthlyConsumption = monthlyData
+        )
+    }
+
+    fun getExcessConsumptionReport(year: Int, month: Int, threshold: BigDecimal?): ExcessConsumptionReportDto {
+        // Si no se proporciona un threshold, obtenerlo de TARIFA_BASICA (que incluye consumo hasta 15 m³)
+        val actualThreshold = threshold ?: billingConfigService.getConfigValue("TARIFA_BASICA", BigDecimal("15"))
+        val startDate = LocalDate.of(year, month, 1)
+        val endDate = startDate.withDayOfMonth(startDate.lengthOfMonth())
+        
+        val readings = waterMeterReadingRepository.findByReadingDateBetweenAndActive(startDate, endDate, true)
+        
+        val excessItems = readings.filter { it.consumption > actualThreshold }
+            .map { reading ->
+                ExcessConsumptionItemDto(
+                    partnerId = reading.partner.id,
+                    partnerNumber = reading.partner.partnerNumber,
+                    partnerName = reading.partner.fullName,
+                    initialReading = reading.previousReading,
+                    finalReading = reading.currentReading,
+                    consumption = reading.consumption,
+                    excess = reading.consumption.subtract(actualThreshold),
+                    readingDate = reading.readingDate
+                )
+            }
+            .sortedByDescending { it.consumption }
+
+        return ExcessConsumptionReportDto(
+            year = year,
+            month = month,
+            threshold = actualThreshold,
+            items = excessItems
+        )
+    }
+
+    private fun getMonthNumber(monthAbbr: String): Int {
+        return when (monthAbbr.lowercase()) {
+            "ene" -> 1
+            "feb" -> 2
+            "mar" -> 3
+            "abr" -> 4
+            "may" -> 5
+            "jun" -> 6
+            "jul" -> 7
+            "ago" -> 8
+            "sep" -> 9
+            "oct" -> 10
+            "nov" -> 11
+            "dic" -> 12
+            else -> 0
+        }
     }
 
     // Water Payment Receipt PDF Generation

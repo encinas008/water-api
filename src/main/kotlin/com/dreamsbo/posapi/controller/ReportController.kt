@@ -19,10 +19,26 @@ import com.dreamsbo.posapi.dto.DebtReportDto
 import com.dreamsbo.posapi.dto.MonthlyReadingsReportDto
 import com.dreamsbo.posapi.dto.PartnerStatusReportDto
 import com.dreamsbo.posapi.dto.MissingReadingItemDto
+import com.dreamsbo.posapi.dto.DashboardStatsDto
+import com.dreamsbo.posapi.dto.ExcessConsumptionReportDto
+import java.math.BigDecimal
 
 @RestController
 @RequestMapping("/reports")
 class ReportController(val reportService: ReportService) {
+
+    @GetMapping("/dashboard-stats")
+    fun getDashboardStats(@RequestParam(required = false) year: Int?): DashboardStatsDto {
+        return reportService.getDashboardStats(year)
+    }
+
+    @GetMapping("/partner-consumption/{partnerId}")
+    fun getPartnerConsumptionStats(
+        @PathVariable partnerId: UUID,
+        @RequestParam(required = false) year: Int?
+    ): com.dreamsbo.posapi.dto.PartnerConsumptionStatsDto {
+        return reportService.getPartnerConsumptionStats(partnerId, year)
+    }
 
     @GetMapping("/movements")
     fun getMovementReport(
@@ -54,6 +70,15 @@ class ReportController(val reportService: ReportService) {
     @GetMapping("/partners-status")
     fun getPartnerStatusReport(): PartnerStatusReportDto {
         return reportService.getPartnerStatusReport()
+    }
+    
+    @GetMapping("/excess-consumption")
+    fun getExcessConsumptionReport(
+        @RequestParam year: Int,
+        @RequestParam month: Int,
+        @RequestParam(required = false) threshold: BigDecimal?
+    ): ExcessConsumptionReportDto {
+        return reportService.getExcessConsumptionReport(year, month, threshold)
     }
 
     @GetMapping("/cutoff-candidates")

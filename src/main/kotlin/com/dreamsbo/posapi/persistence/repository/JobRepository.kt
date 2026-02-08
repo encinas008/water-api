@@ -15,6 +15,8 @@ interface JobRepository : JpaRepository<JobEntity, UUID> {
 
     fun findAllByActive(active: Boolean, sort: Sort): MutableList<JobEntity>
     
+    fun countByActive(active: Boolean): Long
+    
     fun findAllByActive(active: Boolean, pageable: Pageable): Page<JobEntity>
     
     @Query("""

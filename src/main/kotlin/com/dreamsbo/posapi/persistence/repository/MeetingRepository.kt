@@ -15,6 +15,8 @@ interface MeetingRepository : JpaRepository<MeetingEntity, UUID> {
 
     fun findAllByActive(active: Boolean, sort: Sort): MutableList<MeetingEntity>
     
+    fun countByActive(active: Boolean): Long
+    
     fun findAllByActive(active: Boolean, pageable: Pageable): Page<MeetingEntity>
     
     @Query("""

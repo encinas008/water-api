@@ -302,8 +302,8 @@ data class PartnerStatusItemDto(
 )
 
 data class PartnerStatusReportDto(
-    val statusSummary: Map<String, Int>,
-    val results: List<PartnerStatusItemDto>
+    val statusSummary: Map<String, Long>,
+    val items: List<PartnerStatusItemDto>
 )
 
 data class MissingReadingItemDto(
@@ -311,6 +311,45 @@ data class MissingReadingItemDto(
     val partnerNumber: Long?,
     val partnerName: String,
     val waterMeterNumber: String?,
-    val previousReading: BigDecimal?,
-    val previousReadingDate: LocalDate?
+    val lastReading: BigDecimal?,
+    val lastReadingDate: LocalDate?
+)
+
+data class MonthlyConsumptionDto(
+    val month: String,
+    val consumption: BigDecimal
+)
+
+data class DashboardStatsDto(
+    val totalPartners: Long,
+    val totalReadings: Long,
+    val totalMeetings: Long,
+    val totalJobs: Long,
+    val totalUsers: Long,
+    val monthlyConsumption: List<MonthlyConsumptionDto>
+)
+
+data class ExcessConsumptionItemDto(
+    val partnerId: UUID,
+    val partnerNumber: Long?,
+    val partnerName: String,
+    val initialReading: BigDecimal,
+    val finalReading: BigDecimal,
+    val consumption: BigDecimal,
+    val excess: BigDecimal,
+    val readingDate: LocalDate
+)
+
+data class ExcessConsumptionReportDto(
+    val year: Int,
+    val month: Int,
+    val threshold: BigDecimal,
+    val items: List<ExcessConsumptionItemDto>
+)
+
+data class PartnerConsumptionStatsDto(
+    val partnerId: UUID,
+    val partnerName: String,
+    val partnerNumber: Int,
+    val monthlyConsumption: List<MonthlyConsumptionDto>
 )

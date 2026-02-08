@@ -15,6 +15,8 @@ interface PartnerRepository : JpaRepository<PartnerEntity, UUID> {
 
     fun findAllByActive(active: Boolean, sort: Sort): MutableList<PartnerEntity>
     
+    fun countByActive(active: Boolean): Long
+    
     fun findByWaterMeterNumberAndActive(waterMeterNumber: String, active: Boolean): List<PartnerEntity>
     
     fun findAllByActive(active: Boolean, pageable: Pageable): Page<PartnerEntity>
