@@ -47,10 +47,7 @@ interface WaterBillRepository : JpaRepository<WaterBillEntity, UUID> {
     @Query("""
         SELECT b FROM WaterBillEntity b 
         WHERE b.active = :active 
-        AND (
-            CAST(b.partner.partnerNumber AS string) = :search
-            OR LOWER(b.partner.fullName) LIKE LOWER(CONCAT('%', :search, '%'))
-        )
+        AND CAST(b.partner.partnerNumber AS string) = :search
     """)
     fun findAllByActiveAndSearch(
         @Param("active") active: Boolean,
@@ -73,10 +70,7 @@ interface WaterBillRepository : JpaRepository<WaterBillEntity, UUID> {
         SELECT b FROM WaterBillEntity b 
         WHERE b.active = :active 
         AND b.status.code = :statusCode
-        AND (
-            CAST(b.partner.partnerNumber AS string) = :search
-            OR LOWER(b.partner.fullName) LIKE LOWER(CONCAT('%', :search, '%'))
-        )
+        AND CAST(b.partner.partnerNumber AS string) = :search
     """)
     fun findAllByActiveAndStatusAndSearch(
         @Param("active") active: Boolean,
@@ -95,7 +89,7 @@ interface WaterBillRepository : JpaRepository<WaterBillEntity, UUID> {
             SUM(CASE WHEN b.status.code = 'PAID' THEN b.totalAmount ELSE 0 END)
         FROM WaterBillEntity b 
         WHERE b.active = :active
-        AND (:search IS NULL OR :search = '' OR CAST(b.partner.partnerNumber AS string) = :search OR LOWER(b.partner.fullName) LIKE LOWER(CONCAT('%', :search, '%')))
+        AND (:search IS NULL OR :search = '' OR CAST(b.partner.partnerNumber AS string) = :search)
         AND (:statusCode IS NULL OR :statusCode = '' OR b.status.code = :statusCode)
     """)
     fun getBillStats(
