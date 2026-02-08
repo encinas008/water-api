@@ -48,3 +48,7 @@ Copy folder
 docker cp <src-path> <container>:<dest-path> 
 ```
 
+Copy from Contabo
+```cmd
+scp root@192.168.1.100:/app/myfile.sql ~/Download/
+```

@@ -90,6 +90,7 @@ class DebtManagementService(
 
                 DebtReportDto(
                     partnerId = partner.id,
+                    partnerNumber = partner.partnerNumber,
                     partnerName = partner.fullName,
                     partnerIdentificationNumber = partner.partnerIdentificationNumber,
                     totalDebt = currentDebt,
@@ -144,6 +145,7 @@ class DebtManagementService(
 
             DebtReportDto(
                 partnerId = partner.id,
+                partnerNumber = partner.partnerNumber,
                 partnerName = partner.fullName,
                 partnerIdentificationNumber = partner.partnerIdentificationNumber,
                 totalDebt = currentDebt,

@@ -44,7 +44,7 @@ class GlobalExceptionHandler : ResponseEntityExceptionHandler() {
     }
 
     @ExceptionHandler(value = [ExpiredTokenException::class, UnauthorizedException::class])
-    fun unauthorizedException(e: ExpiredTokenException): ResponseEntity<Any> {
+    fun unauthorizedException(e: Exception): ResponseEntity<Any> {
 
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(e.message)
     }

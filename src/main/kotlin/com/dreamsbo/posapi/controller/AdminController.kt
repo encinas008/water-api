@@ -44,4 +44,12 @@ class AdminController(val userService: UserService, val commonService: CommonSer
 
         return userService.updateStatus(userId, userStatus)
     }
+
+    @PutMapping("/users/{userId}/password")
+    fun changePassword(
+        @PathVariable("userId") userId: UUID,
+        @RequestBody changePasswordInputDto: ChangePasswordInputDto
+    ) {
+        userService.changePassword(userId, changePasswordInputDto)
+    }
 }

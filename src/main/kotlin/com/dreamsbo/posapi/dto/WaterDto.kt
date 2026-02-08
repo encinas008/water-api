@@ -186,6 +186,7 @@ data class MonthlyPendingFinesDto(
 // Report DTOs
 data class DebtReportDto(
     val partnerId: UUID,
+    val partnerNumber: Long?,
     val partnerName: String,
     val partnerIdentificationNumber: String?,
     val totalDebt: BigDecimal,

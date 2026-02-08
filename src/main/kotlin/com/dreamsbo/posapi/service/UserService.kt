@@ -356,4 +356,19 @@ class UserService(
 
         return UpdateUserOutputDto(updatedUser.profile.id)
     }
+
+    @Transactional
+    fun changePassword(userId: UUID, input: ChangePasswordInputDto) {
+        val user = userRepository.findById(userId).orElseThrow {
+            NotFoundEntityException("Usuario no encontrado")
+        }
+
+        if (!passwordEncoder.matches(input.currentPassword, user.password)) {
+            throw UnauthorizedException("La contraseña actual es incorrecta")
+        }
+
+        user.password = passwordEncoder.encode(input.newPassword)
+        user.updatedAt = OffsetDateTime.now()
+        userRepository.save(user)
+    }
 }
