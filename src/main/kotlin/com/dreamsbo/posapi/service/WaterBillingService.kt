@@ -2,6 +2,7 @@ package com.dreamsbo.posapi.service
 
 import com.dreamsbo.posapi.common.errorhandler.BadRequestException
 import com.dreamsbo.posapi.common.errorhandler.NotFoundEntityException
+import com.dreamsbo.posapi.dto.AddBillConceptDto
 import com.dreamsbo.posapi.dto.BillConceptItemDto
 import com.dreamsbo.posapi.dto.PendingFineDto
 import com.dreamsbo.posapi.dto.WaterBillDetailDto
@@ -720,6 +721,73 @@ class WaterBillingService(
             dueDate = entity.dueDate,
             isOverdue = isOverdue
         )
+    }
+
+    @Transactional
+    fun addConceptToBill(billId: UUID, input: AddBillConceptDto): WaterBillOutputDto {
+        val bill = waterBillRepository.findById(billId)
+            .orElseThrow { NotFoundEntityException("No se ha encontrado la factura. BillId = $billId") }
+
+        if (bill.status.code != "PENDING") {
+            throw BadRequestException("Solo se pueden agregar conceptos a facturas en estado PENDIENTE")
+        }
+
+        // 1. Crear el nuevo concepto
+        val newConcept = BillConceptItemEntity(
+            waterBill = bill,
+            conceptName = input.conceptName,
+            assignedDate = input.assignedDate,
+            amount = input.amount
+        )
+        billConceptItemRepository.save(newConcept)
+
+        // 2. Actualizar totales de la factura
+        bill.totalAmount = bill.totalAmount.add(input.amount)
+        bill.remainingBalance = bill.remainingBalance.add(input.amount)
+        bill.updatedAt = OffsetDateTime.now()
+
+        val savedBill = waterBillRepository.save(bill)
+
+        // 3. Actualizar deuda del socio
+        val partner = bill.partner
+        partner.currentDebt = partner.currentDebt.add(input.amount)
+        partnerRepository.save(partner)
+
+        return toWaterBillOutputDto(savedBill)
+    }
+
+    @Transactional
+    fun removeConceptFromBill(billId: UUID, conceptId: UUID): WaterBillOutputDto {
+        val bill = waterBillRepository.findById(billId)
+            .orElseThrow { NotFoundEntityException("No se ha encontrado la factura. BillId = $billId") }
+
+        if (bill.status.code != "PENDING") {
+            throw BadRequestException("Solo se pueden eliminar conceptos de facturas en estado PENDIENTE")
+        }
+
+        val concept = billConceptItemRepository.findById(conceptId)
+            .orElseThrow { NotFoundEntityException("No se ha encontrado el concepto. ConceptId = $conceptId") }
+
+        if (concept.waterBill.id != billId) {
+            throw BadRequestException("El concepto no pertenece a esta factura")
+        }
+
+        // 1. Desactivar el concepto
+        concept.active = false
+        billConceptItemRepository.save(concept)
+
+        // 2. Actualizar totales de la factura
+        bill.totalAmount = bill.totalAmount.subtract(concept.amount)
+        bill.remainingBalance = bill.remainingBalance.subtract(concept.amount)
+        bill.updatedAt = OffsetDateTime.now()
+        val savedBill = waterBillRepository.save(bill)
+
+        // 3. Actualizar deuda del socio
+        val partner = bill.partner
+        partner.currentDebt = partner.currentDebt.subtract(concept.amount)
+        partnerRepository.save(partner)
+
+        return toWaterBillOutputDto(savedBill)
     }
 
     @Transactional

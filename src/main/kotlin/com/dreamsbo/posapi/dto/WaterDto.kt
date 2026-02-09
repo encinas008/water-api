@@ -63,6 +63,12 @@ data class BillConceptItemDto(
     val amount: BigDecimal
 )
 
+data class AddBillConceptDto(
+    val conceptName: String,
+    val amount: BigDecimal,
+    val assignedDate: LocalDate
+)
+
 data class WaterBillOutputDto(
     val id: UUID,
     val billNumber: String,

@@ -1,5 +1,6 @@
 package com.dreamsbo.posapi.controller
 
+import com.dreamsbo.posapi.dto.AddBillConceptDto
 import com.dreamsbo.posapi.dto.WaterBillDetailDto
 import com.dreamsbo.posapi.dto.WaterBillGenerationDto
 import com.dreamsbo.posapi.dto.WaterBillInputDto
@@ -70,6 +71,23 @@ class WaterBillingController(
         @RequestParam(required = false) statusCode: String?
     ): com.dreamsbo.posapi.dto.WaterBillStatsDto {
         return waterBillingService.getBillStats(search, statusCode)
+    }
+
+    @PostMapping("/{id}/concepts")
+    @ResponseStatus(HttpStatus.CREATED)
+    fun addConcept(
+        @PathVariable id: UUID,
+        @RequestBody input: AddBillConceptDto
+    ): WaterBillOutputDto {
+        return waterBillingService.addConceptToBill(id, input)
+    }
+
+    @DeleteMapping("/{id}/concepts/{conceptId}")
+    fun deleteConcept(
+        @PathVariable id: UUID,
+        @PathVariable conceptId: UUID
+    ): WaterBillOutputDto {
+        return waterBillingService.removeConceptFromBill(id, conceptId)
     }
 
     @PostMapping("/{id}/cancel")
