@@ -8,3 +8,10 @@ data class RoleOutputDto(
     val description: String?,
     val code: String
 )
+
+data class RoleInputDto(
+    val name: String,
+    val description: String?,
+    val code: String
+)
+
