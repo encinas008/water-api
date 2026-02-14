@@ -592,6 +592,7 @@ class WaterPaymentService(
             billNumber = entity.waterBill?.billNumber,
             partnerId = entity.partner.id,
             partnerName = entity.partner.fullName,
+            partnerNumber = entity.partner.partnerNumber,
             paymentDate = entity.paymentDate,
             amount = entity.amount,
             paymentTypeName = entity.paymentType.name,

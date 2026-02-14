@@ -49,10 +49,11 @@ interface PartnerRepository : JpaRepository<PartnerEntity, UUID> {
         pageable: Pageable
     ): Page<PartnerEntity>
 
-    @Query("""
-        SELECT p FROM PartnerEntity p 
-        WHERE p.active = true 
-        AND CAST(p.partnerNumber AS string) = :query
-    """)
-    fun searchByTerm(@Param("query") query: String): List<PartnerEntity>
+    fun findByPartnerNumberAndActive(partnerNumber: Long, active: Boolean): List<PartnerEntity>
+
+    @Query("SELECT p FROM PartnerEntity p WHERE p.active = :active AND LOWER(p.fullName) LIKE LOWER(CONCAT('%', :search, '%'))")
+    fun findByFullNameContainingIgnoreCaseAndActive(
+        @Param("search") search: String,
+        @Param("active") active: Boolean
+    ): List<PartnerEntity>
 }

@@ -145,6 +145,7 @@ data class WaterPaymentOutputDto(
     val billNumber: String?,
     val partnerId: UUID,
     val partnerName: String,
+    val partnerNumber: Long?,
     val paymentDate: LocalDate,
     val amount: BigDecimal,
     val paymentTypeName: String,

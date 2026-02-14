@@ -278,7 +278,18 @@ class PartnerService(
     }
 
     fun searchPartners(query: String): List<PartnerOutputDto> {
-        return partnerRepository.searchByTerm(query.trim()).map { toPartnerOutputDto(it) }
+        val trimmedQuery = query.trim()
+        val partnerNumber = trimmedQuery.toLongOrNull()
+        
+        return if (partnerNumber != null) {
+            // Si es un número, buscamos por número de socio EXACTO
+            partnerRepository.findByPartnerNumberAndActive(partnerNumber, true)
+                .map { toPartnerOutputDto(it) }
+        } else {
+            // Si no es un número, buscamos por nombre (parcial)
+            partnerRepository.findByFullNameContainingIgnoreCaseAndActive(trimmedQuery, true)
+                .map { toPartnerOutputDto(it) }
+        }
     }
 
     fun checkWaterMeterNumberExists(waterMeterNumber: String, excludePartnerId: UUID? = null): Boolean {

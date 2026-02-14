@@ -17,7 +17,8 @@ class MonthlyPendingFinesService(
     private val jobAttendanceRepository: JobAttendanceRepository,
     private val meetingAttendanceRepository: MeetingAttendanceRepository,
     private val partnerRepository: PartnerRepository,
-    private val waterPaymentDetailRepository: WaterPaymentDetailRepository
+    private val waterPaymentDetailRepository: WaterPaymentDetailRepository,
+    private val billingConfigService: BillingConfigService
 ) {
 
     fun getMonthlyPendingFines(partnerId: UUID, month: Int, year: Int): MonthlyPendingFinesDto {
@@ -69,15 +70,38 @@ class MonthlyPendingFinesService(
             )
         }
 
+        // --- NUEVA LÓGICA PARA CONEXIÓN PASIVA (INACTIVE) ---
+        val passiveFines = mutableListOf<PendingFineDto>()
+        val partner = partnerRepository.findById(partnerId).get()
+        if (partner.connectionStatus?.code == "INACTIVE") {
+            // Solo agregar si no ha sido pagada (en este caso es mensual, así que verificamos por periodo)
+            // Nota: El filtrado contra la factura ya generada se hace en WaterBillingService.toWaterBillOutputDto
+            // Aquí solo la reportamos como una multa "potencial" del periodo.
+            
+            val fineAmount = billingConfigService.getConfigValue("MULTA_CONEXION_PASIVA", BigDecimal("5.0"))
+            
+            if (fineAmount > BigDecimal.ZERO) {
+                passiveFines.add(
+                    PendingFineDto(
+                        id = UUID.nameUUIDFromBytes("passive-${partnerId}-${year}-${month}".toByteArray()),
+                        type = "OTRO",
+                        name = "Multa por conexión pasiva",
+                        date = startDate,
+                        fine = fineAmount
+                    )
+                )
+            }
+        }
+
         // Calcular total de multas
-        val totalFines = jobAbsences.sumOf { it.fine } + meetingAbsences.sumOf { it.fine }
+        val totalFines = jobAbsences.sumOf { it.fine } + meetingAbsences.sumOf { it.fine } + passiveFines.sumOf { it.fine }
 
         return MonthlyPendingFinesDto(
             partnerId = partnerId,
             month = month,
             year = year,
             jobAbsences = jobAbsences,
-            meetingAbsences = meetingAbsences,
+            meetingAbsences = meetingAbsences + passiveFines,
             totalFines = totalFines
         )
     }

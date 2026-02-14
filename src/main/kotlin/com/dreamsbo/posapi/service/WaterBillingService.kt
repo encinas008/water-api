@@ -15,6 +15,7 @@ import com.dreamsbo.posapi.persistence.entity.BillConceptItemEntity
 import com.dreamsbo.posapi.persistence.entity.WaterBillEntity
 import com.dreamsbo.posapi.persistence.repository.*
 import jakarta.transaction.Transactional
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
@@ -41,6 +42,8 @@ class WaterBillingService(
     private val cashFlowTypeRepository: CashFlowTypeRepository,
     private val billingConfigService: BillingConfigService,
     private val connectionStatusTypeRepository: ConnectionStatusTypeRepository,
+    @Value("\${WATER_BILLING_BASIC_LIMIT:15.0}")
+    private val basicConsumptionLimit: Double = 15.0
 ) {
 
     @Transactional
@@ -62,12 +65,13 @@ class WaterBillingService(
 
                 val consumption = latestReading.map { it.consumption }.orElse(BigDecimal.ZERO)
                 
-                // Nueva lógica: Los primeros 15m3 están incluidos en la Tarifa Básica (15 BS)
-                // El baseAmount de la factura será 0 si es <= 15m3, o el excedente si es > 15m3
-                val baseAmount = if (consumption <= BigDecimal("15")) {
+                // Nueva lógica: Los primeros m3 (configurables por ENV) están incluidos en la Tarifa Básica
+                val threshold = BigDecimal.valueOf(basicConsumptionLimit)
+                val baseAmount = if (consumption <= threshold) {
                     BigDecimal.ZERO
                 } else {
-                    consumption.subtract(BigDecimal("15")).multiply(BigDecimal("5"))
+                    val multaExcesoM3 = billingConfigService.getConfigValue("MULTA_EXCESO_M3", BigDecimal("5.0"))
+                    consumption.subtract(threshold).multiply(multaExcesoM3)
                 }
 
                 val billNumber = generateBillNumber(partner.id)
@@ -164,23 +168,6 @@ class WaterBillingService(
                 // Actualizar deuda del socio
                 partner.currentDebt = partner.currentDebt.add(multaCorteMonto)
             }
-        } else if (currentStatus == "SUSPENDED") {
-            // --- LÓGICA: Pago por mantenimiento (mensual mientras esté suspendida) ---
-            val maintenanceFeeMonto = billingConfigService.getConfigValue("MANTENIMIENTO_SUSPENDIDA", BigDecimal("5.0"))
-            val maintenanceFee = BillConceptItemEntity(
-                waterBill = bill,
-                conceptName = "Pago por mantenimiento",
-                assignedDate = LocalDate.now(),
-                amount = maintenanceFeeMonto
-            )
-            billConceptItemRepository.save(maintenanceFee)
-            
-            // Actualizar totales de la factura y deuda del socio
-            bill.totalAmount = bill.totalAmount.add(maintenanceFeeMonto)
-            bill.remainingBalance = bill.remainingBalance.add(maintenanceFeeMonto)
-            waterBillRepository.save(bill)
-            partner.currentDebt = partner.currentDebt.add(maintenanceFeeMonto)
-
         } else if (currentStatus == "CUT_OFF") {
             // "despues de estar en un estado cortado cada 3 meses es multa de 50bs"
             // Nota: El usuario dice "cada 3 meses", así que en la 3ra, 6ta, 9na... factura adicional después del corte.
@@ -346,11 +333,13 @@ class WaterBillingService(
 
         val consumption = reading.consumption
         
-        // Nueva lógica: Los primeros 15m3 están incluidos en la Tarifa Básica (15 BS)
-        val excessAmount = if (consumption <= BigDecimal("15")) {
+        // Nueva lógica: Los primeros m3 (configurables por ENV) están incluidos en la Tarifa Básica
+        val threshold = BigDecimal.valueOf(basicConsumptionLimit)
+        val excessAmount = if (consumption <= threshold) {
             BigDecimal.ZERO
         } else {
-            consumption.subtract(BigDecimal("15")).multiply(BigDecimal("5"))
+            val multaExcesoM3 = billingConfigService.getConfigValue("MULTA_EXCESO_M3", BigDecimal("5.0"))
+            consumption.subtract(threshold).multiply(multaExcesoM3)
         }
         val baseAmount = excessAmount
 
@@ -438,11 +427,13 @@ class WaterBillingService(
             }
         println("✅ Estado PENDING encontrado: ${pendingStatus.name}")
         
-        // Nueva lógica: Los primeros 15m3 están incluidos en la Tarifa Básica (15 BS)
-        val excessAmount = if (input.consumptionM3 <= BigDecimal("15")) {
+        // Nueva lógica: Los primeros m3 (configurables por ENV) están incluidos en la Tarifa Básica
+        val threshold = BigDecimal.valueOf(basicConsumptionLimit)
+        val excessAmount = if (input.consumptionM3 <= threshold) {
             BigDecimal.ZERO
         } else {
-            input.consumptionM3.subtract(BigDecimal("15")).multiply(BigDecimal("5"))
+            val multaExcesoM3 = billingConfigService.getConfigValue("MULTA_EXCESO_M3", BigDecimal("5.0"))
+            input.consumptionM3.subtract(threshold).multiply(multaExcesoM3)
         }
         val baseAmount = excessAmount
         
@@ -507,15 +498,36 @@ class WaterBillingService(
     }
 
     private fun createDefaultBillConcepts(bill: WaterBillEntity, assignedDate: LocalDate): BigDecimal {
+        val currentStatus = bill.partner.connectionStatus?.code?.uppercase()?.trim() ?: "ACTIVE"
+        val isCutOff = currentStatus == "CUT_OFF"
+        val isInactive = currentStatus == "INACTIVE"
+        val isSuspended = currentStatus == "SUSPENDED"
+
+        // --- LÓGICA PARA SOCIOS SUSPENDIDOS ---
+        // Si el socio está suspendido, no paga tarifa básica ni otros aportes. 
+        // Solo paga el mantenimiento mensual configurado.
+        if (isSuspended) {
+            val maintenanceFeeMonto = billingConfigService.getConfigValue("MANTENIMIENTO_SUSPENDIDA", BigDecimal("5.0"))
+            val maintenanceFee = BillConceptItemEntity(
+                waterBill = bill,
+                conceptName = "Pago por mantenimiento (Socio Suspendido)",
+                assignedDate = assignedDate,
+                amount = maintenanceFeeMonto
+            )
+            billConceptItemRepository.save(maintenanceFee)
+            return maintenanceFeeMonto
+        }
+
         // Obtener valores configurables
-        val tarifaBasica = billingConfigService.getConfigValue("TARIFA_BASICA", BigDecimal("15.0"))
+        val tarifaBasicaValue = billingConfigService.getConfigValue("TARIFA_BASICA", BigDecimal("15.0"))
         val multaExcesoM3 = billingConfigService.getConfigValue("MULTA_EXCESO_M3", BigDecimal("5.0"))
         val aporteDeporte = billingConfigService.getConfigValue("APORTE_DEPORTE", BigDecimal("2.0"))
         val aporteOTB = billingConfigService.getConfigValue("APORTE_OTB", BigDecimal("3.0"))
         
-        // Crear concepto para el consumo excedente si aplica
-        val excessConcept = if (bill.consumptionM3 > tarifaBasica) {
-            val excessM3 = bill.consumptionM3.subtract(tarifaBasica)
+        // Crear concepto para el consumo excedente si aplica (válido incluso para CUT_OFF/INACTIVE si hubo consumo)
+        val threshold = BigDecimal.valueOf(basicConsumptionLimit)
+        val excessConcept = if (bill.consumptionM3 > threshold) {
+            val excessM3 = bill.consumptionM3.subtract(threshold)
             BillConceptItemEntity(
                 waterBill = bill,
                 conceptName = "Multa por exceso de consumo de agua ($excessM3 m³ × $multaExcesoM3 Bs/m³)",
@@ -524,29 +536,37 @@ class WaterBillingService(
             )
         } else null
         
-        // Conceptos adicionales fijos
-        val additionalConcepts = mutableListOf(
-            BillConceptItemEntity(
-                waterBill = bill,
-                conceptName = "Aporte al deporte",
-                assignedDate = assignedDate,
-                amount = aporteDeporte
-            ),
-            BillConceptItemEntity(
-                waterBill = bill,
-                conceptName = "Tarifa Básica (Consumo hasta $tarifaBasica m³)",
-                assignedDate = assignedDate,
-                amount = tarifaBasica
-            ),
-            BillConceptItemEntity(
-                waterBill = bill,
-                conceptName = "Aporte a la OTB",
-                assignedDate = assignedDate,
-                amount = aporteOTB
-            )
-        )
+        // Conceptos adicionales fijos (Se omiten para socios CUT_OFF e INACTIVE)
+        val additionalConcepts = mutableListOf<BillConceptItemEntity>()
         
-        // --- NUEVA LÓGICA: Buscar multas de reuniones y trabajos del mes para incluirlas como conceptos ---
+        if (!isCutOff && !isInactive) {
+            additionalConcepts.add(
+                BillConceptItemEntity(
+                    waterBill = bill,
+                    conceptName = "Aporte al deporte",
+                    assignedDate = assignedDate,
+                    amount = aporteDeporte
+                )
+            )
+            additionalConcepts.add(
+                BillConceptItemEntity(
+                    waterBill = bill,
+                    conceptName = "Tarifa Básica",
+                    assignedDate = assignedDate,
+                    amount = tarifaBasicaValue
+                )
+            )
+            additionalConcepts.add(
+                BillConceptItemEntity(
+                    waterBill = bill,
+                    conceptName = "Aporte a la OTB",
+                    assignedDate = assignedDate,
+                    amount = aporteOTB
+                )
+            )
+        }
+
+        // --- LÓGICA: Buscar multas de reuniones, trabajos y otros (como conexión pasiva) ---
         val monthlyFines = monthlyPendingFinesService.getMonthlyPendingFines(
             bill.partner.id, 
             assignedDate.monthValue, 
@@ -562,10 +582,15 @@ class WaterBillingService(
             )
         }
         
-        val meetingFines = monthlyFines.meetingAbsences.map { fine ->
+        val meetingAndOtherFines = monthlyFines.meetingAbsences.map { fine ->
+            val prefix = when(fine.type) {
+                "REUNION" -> "Multa Reunión: "
+                "TRABAJO" -> "Multa Trabajo: "
+                else -> "" // Para OTRO (Conexión Pasiva) no ponemos prefijo ya que fine.name ya es descriptivo
+            }
             BillConceptItemEntity(
                 waterBill = bill,
-                conceptName = "Multa Reunión: ${fine.name}",
+                conceptName = "$prefix${fine.name}",
                 assignedDate = assignedDate,
                 amount = fine.fine
             )
@@ -576,7 +601,7 @@ class WaterBillingService(
         excessConcept?.let { allConcepts.add(it) }
         allConcepts.addAll(additionalConcepts)
         allConcepts.addAll(jobFines)
-        allConcepts.addAll(meetingFines)
+        allConcepts.addAll(meetingAndOtherFines)
         
         billConceptItemRepository.saveAll(allConcepts)
         

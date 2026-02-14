@@ -528,6 +528,48 @@ class ReportService(
         )
     }
 
+    fun getMonthlyBillsReport(year: Int, month: Int, status: String?): List<WaterBillOutputDto> {
+        val startDate = LocalDate.of(year, month, 1)
+        val endDate = startDate.withDayOfMonth(startDate.lengthOfMonth())
+
+        var bills = waterBillRepository.findByBillingPeriodStartBetweenAndActive(startDate, endDate, true)
+
+        if (!status.isNullOrBlank() && status != "ALL") {
+            bills = bills.filter { it.status.code == status }
+        }
+
+        return bills.map { bill ->
+            WaterBillOutputDto(
+                id = bill.id,
+                billNumber = bill.billNumber,
+                partnerId = bill.partner.id,
+                partnerName = bill.partner.fullName,
+                partnerNumber = bill.partner.partnerNumber,
+                readingId = bill.reading?.id,
+                billingPeriodStart = bill.billingPeriodStart,
+                billingPeriodEnd = bill.billingPeriodEnd,
+                consumptionM3 = bill.consumptionM3,
+                ratePerM3 = bill.ratePerM3,
+                baseAmount = bill.baseAmount,
+                totalAmount = bill.totalAmount,
+                paidAmount = bill.paidAmount,
+                remainingBalance = bill.remainingBalance,
+                statusCode = bill.status.code,
+                statusName = bill.status.name,
+                dueDate = bill.dueDate,
+                paidDate = bill.paidDate,
+                isOverdue = bill.dueDate.isBefore(LocalDate.now()) && bill.status.code != "PAID",
+                concepts = emptyList(),
+                pendingFines = emptyList(),
+                totalFinesAmount = BigDecimal.ZERO,
+                totalPayableAmount = bill.totalAmount,
+                totalFinesPaid = BigDecimal.ZERO,
+                createdAt = bill.createdAt,
+                updatedAt = bill.updatedAt
+            )
+        }.sortedBy { it.partnerNumber }
+    }
+
     private fun getMonthNumber(monthAbbr: String): Int {
         return when (monthAbbr.lowercase()) {
             "ene" -> 1

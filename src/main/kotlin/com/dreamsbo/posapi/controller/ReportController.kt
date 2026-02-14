@@ -16,6 +16,8 @@ import java.time.LocalDate
 import java.util.UUID
 import com.dreamsbo.posapi.dto.DailyMovementReportDto
 import com.dreamsbo.posapi.dto.DebtReportDto
+import com.dreamsbo.posapi.dto.WaterPaymentOutputDto
+import com.dreamsbo.posapi.dto.WaterBillOutputDto
 import com.dreamsbo.posapi.dto.MonthlyReadingsReportDto
 import com.dreamsbo.posapi.dto.PartnerStatusReportDto
 import com.dreamsbo.posapi.dto.MissingReadingItemDto
@@ -142,5 +144,14 @@ class ReportController(val reportService: ReportService) {
             .ok()
             .headers(headers)
             .body(pdfBytes)
+    }
+
+    @GetMapping("/monthly-bills")
+    fun getMonthlyBillsReport(
+        @RequestParam year: Int,
+        @RequestParam month: Int,
+        @RequestParam(required = false) status: String?
+    ): List<WaterBillOutputDto> {
+        return reportService.getMonthlyBillsReport(year, month, status)
     }
 }

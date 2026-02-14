@@ -9,3 +9,7 @@ server:
 print:
   medical-prescription:
     orientation: ${PRINT_MEDICAL_PRESCRIPTION_ORIENTATION:vertical}
+
+water:
+  billing:
+    basic-consumption-limit: ${WATER_BILLING_BASIC_LIMIT:15.0}

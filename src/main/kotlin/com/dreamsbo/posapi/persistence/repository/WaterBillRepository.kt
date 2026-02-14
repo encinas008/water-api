@@ -103,4 +103,6 @@ interface WaterBillRepository : JpaRepository<WaterBillEntity, UUID> {
 
     @Query("SELECT b.partner.id FROM WaterBillEntity b WHERE b.active = true AND b.status.code IN ('PENDING', 'OVERDUE', 'PARTIAL_PAID') GROUP BY b.partner.id HAVING COUNT(b.id) >= :minCount")
     fun findPartnerIdsWithPendingBillsCount(@Param("minCount") minCount: Long): List<UUID>
+
+    fun findByPaidDateBetweenAndActive(startDate: LocalDate, endDate: LocalDate, active: Boolean): List<WaterBillEntity>
 }
