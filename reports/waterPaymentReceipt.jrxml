@@ -41,6 +41,8 @@
 	<parameter name="communityName" class="java.lang.String"/>
 	<parameter name="conceptsList" class="java.util.List"/>
 	<parameter name="correlativeNumber" class="java.lang.Integer"/>
+	<parameter name="cashierName" class="java.lang.String"/>
+	<parameter name="isReprint" class="java.lang.Boolean"/>
 
 	<queryString>
 		<![CDATA[]]>
@@ -72,6 +74,13 @@
 				<textElement textAlignment="Center" verticalAlignment="Middle"><font fontName="FreeSans" size="8" isBold="true" isUnderline="true"/></textElement>
 				<text><![CDATA[ORIGINAL - SOCIO]]></text>
 			</staticText>
+			<textField>
+				<reportElement x="0" y="32" width="280" height="10" uuid="bc2a832a-cb85-4876-9d32-d8120fa26f1a" forecolor="#CC0000">
+					<printWhenExpression><![CDATA[$P{isReprint}]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Center"><font size="7" isBold="true"/></textElement>
+				<textFieldExpression><![CDATA["*** RE-IMPRESIÓN / DUPLICADO ***"]]></textFieldExpression>
+			</textField>
 
 			<!-- Datos compactos -->
 			<staticText>
@@ -228,6 +237,13 @@
 				<textElement textAlignment="Center" verticalAlignment="Middle"><font fontName="FreeSans" size="8" isBold="true" isUnderline="true"/></textElement>
 				<text><![CDATA[COPIA ARCHIVO]]></text>
 			</staticText>
+			<textField>
+				<reportElement x="292" y="32" width="280" height="10" uuid="bc2a832a-cb85-4876-9d32-d8120fa26f1b" forecolor="#CC0000">
+					<printWhenExpression><![CDATA[$P{isReprint}]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Center"><font size="7" isBold="true"/></textElement>
+				<textFieldExpression><![CDATA["*** RE-IMPRESIÓN / DUPLICADO ***"]]></textFieldExpression>
+			</textField>
 
 			<!-- Datos compactos -->
 			<staticText>
@@ -349,6 +365,11 @@
 				<reportElement x="292" y="303" width="145" height="11" positionType="Float" uuid="5821705c-b85f-4ccb-9061-80641f08d6c7"/>
 				<textElement><font size="6" isItalic="true"/></textElement>
 				<textFieldExpression><![CDATA["SON: " + $P{totalAmountInWords}]]></textFieldExpression>
+			</textField>
+			<textField>
+				<reportElement x="292" y="315" width="145" height="10" positionType="Float" uuid="5821705c-b85f-4ccb-9061-80641f08d6c8"/>
+				<textElement><font size="6" isBold="true"/></textElement>
+				<textFieldExpression><![CDATA["CAJERO: " + $P{cashierName}]]></textFieldExpression>
 			</textField>
 
 		</band>

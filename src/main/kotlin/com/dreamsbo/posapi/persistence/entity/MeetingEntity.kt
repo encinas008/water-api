@@ -48,5 +48,7 @@ data class MeetingEntity(
     var createdAt: OffsetDateTime = OffsetDateTime.now(),
     var updatedAt: OffsetDateTime? = null,
     var active: Boolean = true,
+    @Column(name = "locked")
+    var locked: Boolean = false,
 )
 

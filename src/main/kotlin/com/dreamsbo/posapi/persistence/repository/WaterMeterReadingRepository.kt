@@ -21,6 +21,9 @@ interface WaterMeterReadingRepository : JpaRepository<WaterMeterReadingEntity, U
     @Query("SELECT r FROM WaterMeterReadingEntity r WHERE r.partner.id = :partnerId AND r.active = :active ORDER BY r.readingDate DESC LIMIT 1")
     fun findLatestByPartnerId(partnerId: UUID, active: Boolean): Optional<WaterMeterReadingEntity>
 
+    @Query("SELECT r FROM WaterMeterReadingEntity r WHERE r.partner.id = :partnerId AND r.active = :active AND r.currentReading > 0 ORDER BY r.readingDate DESC LIMIT 1")
+    fun findLatestNonZeroByPartnerId(partnerId: UUID, active: Boolean): Optional<WaterMeterReadingEntity>
+
     fun findByReadingDateBetweenAndActive(
         startDate: LocalDate,
         endDate: LocalDate,

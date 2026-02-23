@@ -1,7 +1,7 @@
 # Use a base image with Java 21
 FROM eclipse-temurin:21-alpine
 
-ENV SPRING_PROFILES_ACTIVE = production
+ENV SPRING_PROFILES_ACTIVE=production
 
 LABEL maintainer="dreamsbo"
 

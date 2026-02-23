@@ -86,6 +86,8 @@ data class WaterBillOutputDto(
     val remainingBalance: BigDecimal,
     val statusCode: String,
     val statusName: String,
+    val partnerStatusCode: String? = null,
+    val partnerStatusName: String? = null,
     val dueDate: LocalDate,
     val paidDate: LocalDate?,
     val isOverdue: Boolean,
@@ -246,7 +248,9 @@ data class PaymentReceiptFullDto(
     val totalAmount: BigDecimal,  // IMPORTE TOTAL
     val totalAmountInWords: String,  // Total en palabras (ej: "Son Veinte Bolivianos.")
     val correlativeNumber: Int? = null,
-    val communityName: String = "COMUNIDAD GUADALUPE"  // Nombre de la comunidad
+    val communityName: String = "COMUNIDAD GUADALUPE",  // Nombre de la comunidad
+    val cashierName: String? = null,
+    val isReprint: Boolean = false
 )
 
 data class PendingReadingsReportDto(

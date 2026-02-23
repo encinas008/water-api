@@ -13,6 +13,7 @@ import java.util.*
 @Repository
 interface JobRepository : JpaRepository<JobEntity, UUID> {
 
+    fun findAllByActive(active: Boolean): List<JobEntity>
     fun findAllByActive(active: Boolean, sort: Sort): MutableList<JobEntity>
     
     fun countByActive(active: Boolean): Long

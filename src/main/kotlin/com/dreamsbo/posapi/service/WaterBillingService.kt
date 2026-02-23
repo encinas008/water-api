@@ -22,6 +22,7 @@ import org.springframework.data.domain.Pageable
 import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
 import java.math.BigDecimal
+import java.math.RoundingMode
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
@@ -71,7 +72,8 @@ class WaterBillingService(
                     BigDecimal.ZERO
                 } else {
                     val multaExcesoM3 = billingConfigService.getConfigValue("MULTA_EXCESO_M3", BigDecimal("5.0"))
-                    consumption.subtract(threshold).multiply(multaExcesoM3)
+                    val excessM3 = consumption.subtract(threshold).setScale(0, RoundingMode.DOWN)
+                    excessM3.multiply(multaExcesoM3)
                 }
 
                 val billNumber = generateBillNumber(partner.id)
@@ -339,7 +341,8 @@ class WaterBillingService(
             BigDecimal.ZERO
         } else {
             val multaExcesoM3 = billingConfigService.getConfigValue("MULTA_EXCESO_M3", BigDecimal("5.0"))
-            consumption.subtract(threshold).multiply(multaExcesoM3)
+            val excessM3 = consumption.subtract(threshold).setScale(0, RoundingMode.DOWN)
+            excessM3.multiply(multaExcesoM3)
         }
         val baseAmount = excessAmount
 
@@ -433,7 +436,8 @@ class WaterBillingService(
             BigDecimal.ZERO
         } else {
             val multaExcesoM3 = billingConfigService.getConfigValue("MULTA_EXCESO_M3", BigDecimal("5.0"))
-            input.consumptionM3.subtract(threshold).multiply(multaExcesoM3)
+            val excessM3 = input.consumptionM3.subtract(threshold).setScale(0, RoundingMode.DOWN)
+            excessM3.multiply(multaExcesoM3)
         }
         val baseAmount = excessAmount
         
@@ -526,13 +530,14 @@ class WaterBillingService(
         
         // Crear concepto para el consumo excedente si aplica (válido incluso para CUT_OFF/INACTIVE si hubo consumo)
         val threshold = BigDecimal.valueOf(basicConsumptionLimit)
-        val excessConcept = if (bill.consumptionM3 > threshold) {
-            val excessM3 = bill.consumptionM3.subtract(threshold)
+        val excessM3 = if (bill.consumptionM3 > threshold) bill.consumptionM3.subtract(threshold).setScale(0, RoundingMode.DOWN) else BigDecimal.ZERO
+        
+        val excessConcept = if (excessM3 > BigDecimal.ZERO) {
             BillConceptItemEntity(
                 waterBill = bill,
                 conceptName = "Multa por exceso de consumo de agua ($excessM3 m³ × $multaExcesoM3 Bs/m³)",
                 assignedDate = assignedDate,
-                amount = bill.baseAmount // Ya calculado como excedente en generateBill
+                amount = bill.baseAmount // Ya calculado como excedente redondeado en generateBill
             )
         } else null
         
@@ -715,6 +720,8 @@ class WaterBillingService(
             remainingBalance = calculatedRemainingBalance,
             statusCode = effectiveStatusCode,
             statusName = effectiveStatusName,
+            partnerStatusCode = entity.partner.connectionStatus?.code,
+            partnerStatusName = entity.partner.connectionStatus?.name,
             dueDate = entity.dueDate,
             paidDate = entity.paidDate ?: if (effectiveStatusCode == "PAID") LocalDate.now() else null,
             isOverdue = isOverdue,

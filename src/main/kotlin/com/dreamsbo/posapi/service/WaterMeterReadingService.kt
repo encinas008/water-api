@@ -46,16 +46,25 @@ class WaterMeterReadingService(
             throw BadRequestException("Ya existe una lectura registrada para este socio en el mes de $monthName ${input.readingDate.year}. Solo se permite una lectura por mes.")
         }
 
-        // Get previous reading
+        // Get previous reading (the absolute latest one for field 'previousReading')
         val previousReadingEntity = waterMeterReadingRepository.findLatestByPartnerId(input.partnerId, true)
         val previousReading = previousReadingEntity.map { it.currentReading }.orElse(BigDecimal.ZERO)
 
-        // Validate current reading is greater than previous
-        if (input.currentReading < previousReading) {
-            throw BadRequestException("La lectura actual (${input.currentReading}) debe ser mayor a la lectura anterior ($previousReading)")
+        // Si el usuario marca 0, se busca la última lectura NO-CERO
+        val currentReading = if (input.currentReading.compareTo(BigDecimal.ZERO) == 0) {
+            waterMeterReadingRepository.findLatestNonZeroByPartnerId(input.partnerId, true)
+                .map { it.currentReading }
+                .orElse(previousReading) // Si no hay ninguna > 0, usamos la anterior (que será 0)
+        } else {
+            input.currentReading
         }
 
-        val consumption = input.currentReading - previousReading
+        // Validate current reading is greater than or equal to previous
+        if (currentReading < previousReading) {
+            throw BadRequestException("La lectura actual ($currentReading) debe ser mayor o igual a la lectura anterior ($previousReading)")
+        }
+
+        val consumption = currentReading - previousReading
 
         val image = input.imageId?.let {
             imageRepository.findById(it)
@@ -72,7 +81,7 @@ class WaterMeterReadingService(
             partner = partner,
             readingDate = input.readingDate,
             previousReading = previousReading,
-            currentReading = input.currentReading,
+            currentReading = currentReading,
             consumption = consumption,
             readerUser = readerUser, // Usuario que registra la lectura (opcional)
             observation = input.observation,
@@ -142,12 +151,20 @@ class WaterMeterReadingService(
         input.readingDate?.let { reading.readingDate = it }
         input.observation?.let { reading.observation = it }
 
-        input.currentReading?.let { newReading ->
-            if (newReading < reading.previousReading) {
-                throw BadRequestException("La lectura actual ($newReading) debe ser mayor a la lectura anterior (${reading.previousReading})")
+        input.currentReading?.let { newReadingValue ->
+            val finalReading = if (newReadingValue.compareTo(BigDecimal.ZERO) == 0) {
+                waterMeterReadingRepository.findLatestNonZeroByPartnerId(reading.partner.id, true)
+                    .map { it.currentReading }
+                    .orElse(reading.previousReading)
+            } else {
+                newReadingValue
             }
-            reading.currentReading = newReading
-            reading.consumption = newReading - reading.previousReading
+
+            if (finalReading < reading.previousReading) {
+                throw BadRequestException("La lectura actual ($finalReading) debe ser mayor o igual a la lectura anterior (${reading.previousReading})")
+            }
+            reading.currentReading = finalReading
+            reading.consumption = finalReading - reading.previousReading
         }
 
         reading.updatedAt = OffsetDateTime.now()
@@ -180,7 +197,15 @@ class WaterMeterReadingService(
             .map { it.currentReading }
             .orElse(BigDecimal.ZERO)
 
-        return currentReading >= previousReading
+        val finalReading = if (currentReading.compareTo(BigDecimal.ZERO) == 0) {
+            waterMeterReadingRepository.findLatestNonZeroByPartnerId(partnerId, true)
+                .map { it.currentReading }
+                .orElse(previousReading)
+        } else {
+            currentReading
+        }
+
+        return finalReading >= previousReading
     }
 
     private fun getMonthName(month: Int): String {

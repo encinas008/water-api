@@ -37,6 +37,8 @@
 	<parameter name="communityName" class="java.lang.String"/>
 	<parameter name="conceptsList" class="java.util.List"/>
 	<parameter name="correlativeNumber" class="java.lang.Integer"/>
+	<parameter name="cashierName" class="java.lang.String"/>
+	<parameter name="isReprint" class="java.lang.Boolean"/>
 	
 	<queryString>
 		<![CDATA[]]>
@@ -62,6 +64,13 @@
 				<textElement textAlignment="Center" verticalAlignment="Middle"><font fontName="FreeSans" size="9" isBold="true" isUnderline="true"/></textElement>
 				<text><![CDATA[ORIGINAL - SOCIO]]></text>
 			</staticText>
+			<textField>
+				<reportElement x="0" y="24" width="572" height="10" uuid="bc2a832a-cb85-4876-9d32-d8120fa26f1a" forecolor="#CC0000">
+					<printWhenExpression><![CDATA[$P{isReprint}]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Center"><font size="8" isBold="true"/></textElement>
+				<textFieldExpression><![CDATA["*** RE-IMPRESIÓN / DUPLICADO ***"]]></textFieldExpression>
+			</textField>
 
 			<staticText>
 				<reportElement x="0" y="30" width="40" height="12" uuid="36877b81-cc4d-4305-945b-8c133a54f282"/>
@@ -166,6 +175,13 @@
 				<textElement textAlignment="Center" verticalAlignment="Middle"><font fontName="FreeSans" size="9" isBold="true" isUnderline="true"/></textElement>
 				<text><![CDATA[COPIA ARCHIVO]]></text>
 			</staticText>
+			<textField>
+				<reportElement x="0" y="219" width="572" height="10" uuid="bc2a832a-cb85-4876-9d32-d8120fa26f1b" forecolor="#CC0000">
+					<printWhenExpression><![CDATA[$P{isReprint}]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Center"><font size="8" isBold="true"/></textElement>
+				<textFieldExpression><![CDATA["*** RE-IMPRESIÓN / DUPLICADO ***"]]></textFieldExpression>
+			</textField>
 
 			<staticText>
 				<reportElement x="0" y="225" width="40" height="12" uuid="5821705c-b85f-4ccb-9061-80641f08d6a4"/>
@@ -244,6 +260,11 @@
 				<reportElement x="0" y="327" width="340" height="12" positionType="Float" uuid="5821705c-b85f-4ccb-9061-80641f08d6c7"/>
 				<textElement><font size="7" isItalic="true"/></textElement>
 				<textFieldExpression><![CDATA["SON: " + $P{totalAmountInWords}]]></textFieldExpression>
+			</textField>
+			<textField>
+				<reportElement x="0" y="340" width="340" height="10" positionType="Float" uuid="5821705c-b85f-4ccb-9061-80641f08d6c8"/>
+				<textElement><font size="7" isBold="true"/></textElement>
+				<textFieldExpression><![CDATA["CAJERO: " + $P{cashierName}]]></textFieldExpression>
 			</textField>
 		</band>
 	</detail>

@@ -115,9 +115,12 @@ class ReportController(val reportService: ReportService) {
     }
 
     @GetMapping("/{id}/receipt-pdf")
-    fun downloadReceiptPdf(@PathVariable id: UUID): ResponseEntity<ByteArray> {
+    fun downloadReceiptPdf(
+        @PathVariable id: UUID,
+        @RequestParam(required = false, defaultValue = "false") isReprint: Boolean
+    ): ResponseEntity<ByteArray> {
 
-        val pdfBytes = reportService.generateWaterPaymentReceiptPdf(id)
+        val pdfBytes = reportService.generateWaterPaymentReceiptPdf(id, isReprint)
 
         val headers = HttpHeaders()
         headers.contentType = MediaType.APPLICATION_PDF

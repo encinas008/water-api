@@ -1,5 +1,6 @@
 package com.dreamsbo.posapi.service
 
+import com.dreamsbo.posapi.common.errorhandler.BadRequestException
 import com.dreamsbo.posapi.common.errorhandler.NotFoundEntityException
 import com.dreamsbo.posapi.dto.JobInputDto
 import com.dreamsbo.posapi.dto.JobOutputDto
@@ -87,6 +88,10 @@ class JobService(
 
         val job = jobEntity.get()
 
+        if (job.locked) {
+            throw BadRequestException("No se puede editar este trabajo porque ya está bloqueado.")
+        }
+
         input.name?.let { job.name = it }
         
         val newDate = input.startDate
@@ -119,6 +124,11 @@ class JobService(
         }
 
         val job = jobEntity.get()
+        
+        if (job.locked) {
+            throw BadRequestException("No se puede eliminar este trabajo porque ya está bloqueado.")
+        }
+
         job.active = false
         job.updatedAt = OffsetDateTime.now()
         jobRepository.save(job)
@@ -133,7 +143,8 @@ class JobService(
             fine = entity.fine,
             active = entity.active,
             createdAt = entity.createdAt,
-            updatedAt = entity.updatedAt
+            updatedAt = entity.updatedAt,
+            locked = entity.locked
         )
     }
 }

@@ -64,6 +64,11 @@ class JobAttendanceService(
             throw NotFoundEntityException("No se ha encontrado el trabajo. JobId = ${input.jobId}")
         }
 
+        val job = jobEntity.get()
+        if (job.locked || job.startDate.plusDays(2).isBefore(LocalDate.now())) {
+            throw BadRequestException("No se pueden registrar asistencias para este trabajo porque está bloqueado.")
+        }
+
         val partnerEntity = partnerRepository.findById(input.partnerId)
         if (partnerEntity.isEmpty) {
             throw NotFoundEntityException("No se ha encontrado el socio. PartnerId = ${input.partnerId}")
@@ -99,6 +104,11 @@ class JobAttendanceService(
         val jobEntity = jobRepository.findById(input.jobId)
         if (jobEntity.isEmpty) {
             throw NotFoundEntityException("No se ha encontrado el trabajo. JobId = ${input.jobId}")
+        }
+
+        val job = jobEntity.get()
+        if (job.locked || job.startDate.plusDays(2).isBefore(LocalDate.now())) {
+            throw BadRequestException("No se pueden registrar asistencias para este trabajo porque está bloqueado.")
         }
 
         val createdAttendances = mutableListOf<JobAttendanceOutputDto>()
@@ -152,6 +162,10 @@ class JobAttendanceService(
         }
 
         val attendance = attendanceEntity.get()
+        
+        if (attendance.job.locked || attendance.job.startDate.plusDays(2).isBefore(LocalDate.now())) {
+            throw BadRequestException("No se puede editar esta asistencia porque el trabajo está bloqueado.")
+        }
 
         input.present?.let { attendance.present = it }
         input.checkInTime?.let { attendance.checkInTime = it }
@@ -170,6 +184,11 @@ class JobAttendanceService(
         }
 
         val attendance = attendanceEntity.get()
+        
+        if (attendance.job.locked || attendance.job.startDate.plusDays(2).isBefore(LocalDate.now())) {
+            throw BadRequestException("No se puede eliminar esta asistencia porque el trabajo está bloqueado.")
+        }
+
         attendance.active = false
         attendance.updatedAt = OffsetDateTime.now()
         jobAttendanceRepository.save(attendance)
@@ -231,6 +250,11 @@ class JobAttendanceService(
         }
 
         val job = jobEntity.get()
+        
+        if (job.locked || job.startDate.plusDays(2).isBefore(LocalDate.now())) {
+            throw BadRequestException("No se pueden asignar socios a este trabajo porque está bloqueado.")
+        }
+
         val jobStartDate = job.startDate
 
         // Obtener todos los registros de asistencia activos para este trabajo

@@ -13,7 +13,8 @@ data class JobOutputDto(
     val fine: BigDecimal?,
     val active: Boolean,
     val createdAt: OffsetDateTime,
-    val updatedAt: OffsetDateTime?
+    val updatedAt: OffsetDateTime?,
+    val locked: Boolean
 )
 
 data class JobInputDto(

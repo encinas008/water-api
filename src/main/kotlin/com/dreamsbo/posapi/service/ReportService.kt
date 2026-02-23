@@ -505,8 +505,11 @@ class ReportService(
         
         val readings = waterMeterReadingRepository.findByReadingDateBetweenAndActive(startDate, endDate, true)
         
-        val excessItems = readings.filter { it.consumption > actualThreshold }
-            .map { reading ->
+        val excessItems = readings.mapNotNull { reading ->
+            val rawExcess = reading.consumption.subtract(actualThreshold)
+            val billableExcess = if (rawExcess > BigDecimal.ZERO) rawExcess.setScale(0, RoundingMode.DOWN) else BigDecimal.ZERO
+            
+            if (billableExcess > BigDecimal.ZERO) {
                 ExcessConsumptionItemDto(
                     partnerId = reading.partner.id,
                     partnerNumber = reading.partner.partnerNumber,
@@ -514,11 +517,12 @@ class ReportService(
                     initialReading = reading.previousReading,
                     finalReading = reading.currentReading,
                     consumption = reading.consumption,
-                    excess = reading.consumption.subtract(actualThreshold),
+                    excess = billableExcess,
                     readingDate = reading.readingDate
                 )
-            }
-            .sortedByDescending { it.consumption }
+            } else null
+        }
+        .sortedByDescending { it.consumption }
 
         return ExcessConsumptionReportDto(
             year = year,
@@ -556,6 +560,8 @@ class ReportService(
                 remainingBalance = bill.remainingBalance,
                 statusCode = bill.status.code,
                 statusName = bill.status.name,
+                partnerStatusCode = bill.partner.connectionStatus?.code,
+                partnerStatusName = bill.partner.connectionStatus?.name,
                 dueDate = bill.dueDate,
                 paidDate = bill.paidDate,
                 isOverdue = bill.dueDate.isBefore(LocalDate.now()) && bill.status.code != "PAID",
@@ -590,7 +596,7 @@ class ReportService(
 
     // Water Payment Receipt PDF Generation
     
-    fun generateWaterPaymentReceiptPdf(paymentId: UUID): ByteArray {
+    fun generateWaterPaymentReceiptPdf(paymentId: UUID, isReprint: Boolean = false): ByteArray {
         val payment = waterPaymentRepository.findById(paymentId)
             .orElseThrow { NotFoundEntityException("No se ha encontrado el pago. PaymentId = $paymentId") }
         
@@ -662,7 +668,7 @@ class ReportService(
         params["meterNumber"] = partner.waterMeterNumber ?: "0"
         
         if (bill != null) {
-            params["paymentMonth"] = getMonthName(bill.billingPeriodStart.monthValue).uppercase()
+            params["paymentMonth"] = "${getMonthName(bill.billingPeriodStart.monthValue).uppercase()} ${bill.billingPeriodStart.year}"
             params["paymentMonthDate"] = formatMonthDate(bill.billingPeriodEnd)
         } else {
             params["paymentMonth"] = "INSTALACIÓN"
@@ -675,6 +681,10 @@ class ReportService(
         // El monto total a mostrar debe ser el monto pagado en este recibo.
         params["totalAmount"] = payment.amount 
         params["totalAmountInWords"] = numberToWords(payment.amount)
+        
+        // Agregar Cajero y Re-impresión
+        params["cashierName"] = "${payment.user.profile.name} ${payment.user.profile.lastname}"
+        params["isReprint"] = isReprint
         
         val reportPath = if (bill != null) {
             "reports/waterPaymentReceipt.jrxml"

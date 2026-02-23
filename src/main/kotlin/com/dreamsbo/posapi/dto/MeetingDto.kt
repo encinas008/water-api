@@ -19,7 +19,8 @@ data class MeetingOutputDto(
     val waitingMinutes: Int,
     val active: Boolean,
     val createdAt: OffsetDateTime,
-    val updatedAt: OffsetDateTime?
+    val updatedAt: OffsetDateTime?,
+    val locked: Boolean
 )
 
 data class MeetingInputDto(

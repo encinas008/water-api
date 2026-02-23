@@ -50,9 +50,10 @@ class WaterPaymentController(
     @GetMapping("/receipt-full/{id}")
     fun getFullReceipt(
         @PathVariable id: UUID,
-        @RequestParam(required = false, defaultValue = "NOTA DE PAGO") receiptType: String
+        @RequestParam(required = false, defaultValue = "NOTA DE PAGO") receiptType: String,
+        @RequestParam(required = false, defaultValue = "false") isReprint: Boolean
     ): PaymentReceiptFullDto {
-        return waterPaymentService.generateFullReceipt(id, receiptType)
+        return waterPaymentService.generateFullReceipt(id, receiptType, isReprint)
     }
 
     @GetMapping("/pending-fines/partner/{partnerId}")

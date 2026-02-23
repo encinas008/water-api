@@ -267,7 +267,7 @@ class WaterPaymentService(
         )
     }
 
-    fun generateFullReceipt(paymentId: UUID, receiptType: String = "NOTA DE PAGO"): PaymentReceiptFullDto {
+    fun generateFullReceipt(paymentId: UUID, receiptType: String = "NOTA DE PAGO", isReprint: Boolean = false): PaymentReceiptFullDto {
         val payment = waterPaymentRepository.findById(paymentId)
             .orElseThrow { NotFoundEntityException("No se ha encontrado el pago. PaymentId = $paymentId") }
 
@@ -321,7 +321,7 @@ class WaterPaymentService(
 
         // Obtener mes de pago o descripción
         val paymentMonth = if (bill != null) {
-            getMonthName(bill.billingPeriodStart.monthValue).uppercase()
+            "${getMonthName(bill.billingPeriodStart.monthValue).uppercase()} ${bill.billingPeriodStart.year}"
         } else {
             "INSTALACIÓN"
         }
@@ -368,7 +368,9 @@ class WaterPaymentService(
             concepts = concepts,
             totalAmount = totalPaymentAmount,
             totalAmountInWords = totalInWords,
-            correlativeNumber = payment.correlativeNumber
+            correlativeNumber = payment.correlativeNumber,
+            cashierName = "${payment.user.profile.name} ${payment.user.profile.lastname}",
+            isReprint = isReprint
         )
     }
 

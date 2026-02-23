@@ -46,6 +46,11 @@ class MeetingAttendanceService(
             throw NotFoundEntityException("No se ha encontrado la reunión. MeetingId = ${input.meetingId}")
         }
 
+        val meeting = meetingEntity.get()
+        if (meeting.locked || meeting.meetingDate.plusDays(2).isBefore(LocalDate.now())) {
+            throw BadRequestException("No se pueden registrar asistencias para esta reunión porque está bloqueada.")
+        }
+
         val createdAttendances = mutableListOf<MeetingAttendanceOutputDto>()
 
         for (partnerAttendance in input.attendances) {
@@ -112,6 +117,10 @@ class MeetingAttendanceService(
 
         val attendance = attendanceEntity.get()
 
+        if (attendance.meeting.locked || attendance.meeting.meetingDate.plusDays(2).isBefore(LocalDate.now())) {
+            throw BadRequestException("No se puede editar esta asistencia porque la reunión está bloqueada.")
+        }
+
         input.present?.let { attendance.present = it }
         input.checkInTime?.let { attendance.checkInTime = it }
         input.checkOutTime?.let { attendance.checkOutTime = it }
@@ -136,6 +145,11 @@ class MeetingAttendanceService(
         }
 
         val attendance = attendanceEntity.get()
+        
+        if (attendance.meeting.locked || attendance.meeting.meetingDate.plusDays(2).isBefore(LocalDate.now())) {
+            throw BadRequestException("No se puede eliminar esta asistencia porque la reunión está bloqueada.")
+        }
+
         attendance.active = false
         attendance.updatedAt = OffsetDateTime.now()
         meetingAttendanceRepository.save(attendance)
@@ -197,6 +211,11 @@ class MeetingAttendanceService(
         }
 
         val meeting = meetingEntity.get()
+        
+        if (meeting.locked || meeting.meetingDate.plusDays(2).isBefore(LocalDate.now())) {
+            throw BadRequestException("No se pueden asignar socios a esta reunión porque está bloqueada.")
+        }
+
         val meetingDate = meeting.meetingDate
 
         // Obtener todos los registros de asistencia activos para esta reunión

@@ -1,5 +1,6 @@
 package com.dreamsbo.posapi.service
 
+import com.dreamsbo.posapi.common.errorhandler.BadRequestException
 import com.dreamsbo.posapi.common.errorhandler.NotFoundEntityException
 import com.dreamsbo.posapi.dto.MeetingInputDto
 import com.dreamsbo.posapi.dto.MeetingOutputDto
@@ -105,6 +106,10 @@ class MeetingService(
 
         val meeting = meetingEntity.get()
 
+        if (meeting.locked) {
+            throw BadRequestException("No se puede editar esta reunión porque ya está bloqueada.")
+        }
+
         input.name?.let { meeting.name = it.uppercase().trim() }
         
         val newDate = input.meetingDate
@@ -156,6 +161,11 @@ class MeetingService(
         }
 
         val meeting = meetingEntity.get()
+        
+        if (meeting.locked) {
+            throw BadRequestException("No se puede eliminar esta reunión porque ya está bloqueada.")
+        }
+
         meeting.active = false
         meeting.updatedAt = OffsetDateTime.now()
         meetingRepository.save(meeting)
@@ -253,7 +263,8 @@ class MeetingService(
             waitingMinutes = entity.waitingMinutes,
             createdAt = entity.createdAt,
             updatedAt = entity.updatedAt,
-            active = entity.active
+            active = entity.active,
+            locked = entity.locked
         )
     }
 }
