@@ -561,6 +561,8 @@ class WaterBillingService(
         val isInactive = currentStatus == "INACTIVE"
         val isSuspended = currentStatus == "SUSPENDED"
 
+        val allConcepts = mutableListOf<BillConceptItemEntity>()
+
         // --- LÓGICA PARA SOCIOS SUSPENDIDOS ---
         // Si el socio está suspendido, no paga tarifa básica ni otros aportes. 
         // Solo paga el mantenimiento mensual configurado.
@@ -572,82 +574,82 @@ class WaterBillingService(
                 assignedDate = assignedDate,
                 amount = maintenanceFeeMonto
             )
-            billConceptItemRepository.save(maintenanceFee)
-            return maintenanceFeeMonto
-        }
-
-        // Obtener valores configurables
-        val tarifaBasicaValue = billingConfigService.getConfigValue("TARIFA_BASICA", BigDecimal("15.0"))
-        val multaExcesoM3 = billingConfigService.getConfigValue("MULTA_EXCESO_M3", BigDecimal("5.0"))
-        val aporteDeporte = billingConfigService.getConfigValue("APORTE_DEPORTE", BigDecimal("2.0"))
-        val aporteOTB = billingConfigService.getConfigValue("APORTE_OTB", BigDecimal("3.0"))
-        
-        // Crear concepto para el consumo excedente si aplica (válido incluso para CUT_OFF/INACTIVE si hubo consumo)
-        val threshold = BigDecimal.valueOf(basicConsumptionLimit)
-        val excessM3 = if (bill.consumptionM3 > threshold) bill.consumptionM3.subtract(threshold).setScale(0, RoundingMode.DOWN) else BigDecimal.ZERO
-        
-        val excessConcept = if (excessM3 > BigDecimal.ZERO) {
-            BillConceptItemEntity(
-                waterBill = bill,
-                conceptName = "Multa por exceso de consumo de agua ($excessM3 m³ × $multaExcesoM3 Bs/m³)",
-                assignedDate = assignedDate,
-                amount = bill.baseAmount // Ya calculado como excedente redondeado en generateBill
-            )
-        } else null
-        
-        // Conceptos adicionales fijos (Se omiten solo para socios INACTIVE)
-        val additionalConcepts = mutableListOf<BillConceptItemEntity>()
-        
-        if (!isInactive) {
-            additionalConcepts.add(
-                BillConceptItemEntity(
-                    waterBill = bill,
-                    conceptName = "Aporte al deporte",
-                    assignedDate = assignedDate,
-                    amount = aporteDeporte
-                )
-            )
-            additionalConcepts.add(
-                BillConceptItemEntity(
-                    waterBill = bill,
-                    conceptName = "Tarifa Básica",
-                    assignedDate = assignedDate,
-                    amount = tarifaBasicaValue
-                )
-            )
-            additionalConcepts.add(
-                BillConceptItemEntity(
-                    waterBill = bill,
-                    conceptName = "Aporte a la OTB",
-                    assignedDate = assignedDate,
-                    amount = aporteOTB
-                )
-            )
+            allConcepts.add(maintenanceFee)
+        } else {
+            // Obtener valores configurables (para ACTIVOS, CUT_OFF, INACTIVE)
+            val tarifaBasicaValue = billingConfigService.getConfigValue("TARIFA_BASICA", BigDecimal("15.0"))
+            val multaExcesoM3 = billingConfigService.getConfigValue("MULTA_EXCESO_M3", BigDecimal("5.0"))
+            val aporteDeporte = billingConfigService.getConfigValue("APORTE_DEPORTE", BigDecimal("2.0"))
+            val aporteOTB = billingConfigService.getConfigValue("APORTE_OTB", BigDecimal("3.0"))
             
-            // Recargo recurrente cada 3 meses para socios CORTADOS
-            if (isCutOff) {
-                val statusChangedAt = bill.partner.statusChangedAt ?: bill.partner.createdAt
-                val currentBillMonth = assignedDate.withDayOfMonth(1)
-                val statusMonth = statusChangedAt.toLocalDate().withDayOfMonth(1)
-                val monthsInStatus = ChronoUnit.MONTHS.between(statusMonth, currentBillMonth)
-                
-                val mesesIntervalo = billingConfigService.getConfigValue("MESES_PARA_CARGO_CORTE", BigDecimal("3")).toLong()
-                val montoRecurrente = billingConfigService.getConfigValue("CARGO_POR_CORTE_RECURRENTE", BigDecimal("50.0"))
-                
-                if (monthsInStatus > 0 && monthsInStatus % mesesIntervalo == 0L) {
-                    additionalConcepts.add(
-                        BillConceptItemEntity(
-                            waterBill = bill,
-                            conceptName = "Recargo recurrente por estado cortado ($monthsInStatus meses)",
-                            assignedDate = assignedDate,
-                            amount = montoRecurrente
-                        )
+            // Crear concepto para el consumo excedente si aplica (válido incluso para CUT_OFF/INACTIVE si hubo consumo)
+            val threshold = BigDecimal.valueOf(basicConsumptionLimit)
+            val excessM3 = if (bill.consumptionM3 > threshold) bill.consumptionM3.subtract(threshold).setScale(0, RoundingMode.DOWN) else BigDecimal.ZERO
+            
+            val excessConcept = if (excessM3 > BigDecimal.ZERO) {
+                BillConceptItemEntity(
+                    waterBill = bill,
+                    conceptName = "Multa por exceso de consumo de agua ($excessM3 m³ × $multaExcesoM3 Bs/m³)",
+                    assignedDate = assignedDate,
+                    amount = bill.baseAmount // Ya calculado como excedente redondeado en generateBill
+                )
+            } else null
+            
+            // Conceptos adicionales fijos (Se omiten solo para socios INACTIVE)
+            if (!isInactive) {
+                allConcepts.add(
+                    BillConceptItemEntity(
+                        waterBill = bill,
+                        conceptName = "Aporte al deporte",
+                        assignedDate = assignedDate,
+                        amount = aporteDeporte
                     )
+                )
+                allConcepts.add(
+                    BillConceptItemEntity(
+                        waterBill = bill,
+                        conceptName = "Tarifa Básica",
+                        assignedDate = assignedDate,
+                        amount = tarifaBasicaValue
+                    )
+                )
+                allConcepts.add(
+                    BillConceptItemEntity(
+                        waterBill = bill,
+                        conceptName = "Aporte a la OTB",
+                        assignedDate = assignedDate,
+                        amount = aporteOTB
+                    )
+                )
+                
+                // Recargo recurrente cada 3 meses para socios CORTADOS
+                if (isCutOff) {
+                    val statusChangedAt = bill.partner.statusChangedAt ?: bill.partner.createdAt
+                    val currentBillMonth = assignedDate.withDayOfMonth(1)
+                    val statusMonth = statusChangedAt.toLocalDate().withDayOfMonth(1)
+                    val monthsInStatus = ChronoUnit.MONTHS.between(statusMonth, currentBillMonth)
+                    
+                    val mesesIntervalo = billingConfigService.getConfigValue("MESES_PARA_CARGO_CORTE", BigDecimal("3")).toLong()
+                    val montoRecurrente = billingConfigService.getConfigValue("CARGO_POR_CORTE_RECURRENTE", BigDecimal("50.0"))
+                    
+                    if (monthsInStatus > 0 && monthsInStatus % mesesIntervalo == 0L) {
+                        allConcepts.add(
+                            BillConceptItemEntity(
+                                waterBill = bill,
+                                conceptName = "Recargo recurrente por estado cortado ($monthsInStatus meses)",
+                                assignedDate = assignedDate,
+                                amount = montoRecurrente
+                            )
+                        )
+                    }
                 }
             }
+            
+            excessConcept?.let { allConcepts.add(it) }
         }
 
         // --- LÓGICA: Buscar multas de reuniones, trabajos y otros (como conexión pasiva) ---
+        // IMPORTANTE: Las multas se agregan a TODOS los socios, incluyendo SUSPENDIDOS
         val monthlyFines = monthlyPendingFinesService.getMonthlyPendingFines(
             bill.partner.id, 
             assignedDate.monthValue, 
@@ -679,10 +681,7 @@ class WaterBillingService(
             )
         }
         
-        // Combinar conceptos
-        val allConcepts = mutableListOf<BillConceptItemEntity>()
-        excessConcept?.let { allConcepts.add(it) }
-        allConcepts.addAll(additionalConcepts)
+        // Agregar multas a los conceptos
         allConcepts.addAll(jobFines)
         allConcepts.addAll(meetingAndOtherFines)
         
