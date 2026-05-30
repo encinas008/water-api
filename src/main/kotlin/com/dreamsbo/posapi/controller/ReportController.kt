@@ -21,6 +21,7 @@ import com.dreamsbo.posapi.dto.WaterBillOutputDto
 import com.dreamsbo.posapi.dto.MonthlyReadingsReportDto
 import com.dreamsbo.posapi.dto.PartnerStatusReportDto
 import com.dreamsbo.posapi.dto.MissingReadingItemDto
+import com.dreamsbo.posapi.dto.ReadingObservationsReportDto
 import com.dreamsbo.posapi.dto.DashboardStatsDto
 import com.dreamsbo.posapi.dto.ExcessConsumptionReportDto
 import java.math.BigDecimal
@@ -45,11 +46,13 @@ class ReportController(val reportService: ReportService) {
     @GetMapping("/movements")
     fun getMovementReport(
         @RequestParam startDate: String,
-        @RequestParam endDate: String
+        @RequestParam endDate: String,
+        @RequestParam(required = false) userId: UUID?
     ): DailyMovementReportDto {
         return reportService.getMovementReport(
             LocalDate.parse(startDate),
-            LocalDate.parse(endDate)
+            LocalDate.parse(endDate),
+            userId
         )
     }
 
@@ -59,6 +62,14 @@ class ReportController(val reportService: ReportService) {
         @RequestParam month: Int
     ): MonthlyReadingsReportDto {
         return reportService.getMonthlyReadingsReport(year, month)
+    }
+
+    @GetMapping("/reading-observations")
+    fun getReadingObservationsReport(
+        @RequestParam year: Int,
+        @RequestParam month: Int
+    ): ReadingObservationsReportDto {
+        return reportService.getReadingObservationsReport(year, month)
     }
 
     @GetMapping("/missing-readings")

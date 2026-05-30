@@ -69,4 +69,6 @@ interface CashBalanceRepository : JpaRepository<CashBalanceEntity, UUID> {
         @Param("userId") userId: UUID,
         pageable: Pageable
     ): Page<CashBalanceEntity>
+
+    fun findByOpenTimeBetweenAndActive(start: OffsetDateTime, end: OffsetDateTime, active: Boolean): List<CashBalanceEntity>
 }

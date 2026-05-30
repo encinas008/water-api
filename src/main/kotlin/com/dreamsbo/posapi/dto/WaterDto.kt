@@ -38,6 +38,24 @@ data class WaterMeterReadingUpdateDto(
 )
 
 // Water Bill DTOs
+
+data class WaterBillPreviewItemDto(
+    val partnerId: UUID,
+    val partnerName: String,
+    val partnerNumber: String,
+    val hasReading: Boolean,
+    val readingValue: BigDecimal?
+)
+
+data class WaterBillGenerationPreviewDto(
+    val month: Int,
+    val year: Int,
+    val toGenerateCount: Int,
+    val missingReadingsCount: Int,
+    val toGenerate: List<WaterBillPreviewItemDto>,
+    val missingReadings: List<WaterBillPreviewItemDto>
+)
+
 data class WaterBillGenerationDto(
     val billingPeriodStart: LocalDate,
     val billingPeriodEnd: LocalDate,
@@ -363,4 +381,21 @@ data class PartnerConsumptionStatsDto(
     val partnerName: String,
     val partnerNumber: Int,
     val monthlyConsumption: List<MonthlyConsumptionDto>
+)
+
+data class ReadingObservationItemDto(
+    val partnerNumber: Long?,
+    val partnerName: String,
+    val readingValue: BigDecimal,
+    val readingDate: LocalDate,
+    val consumption: BigDecimal,
+    val observation: String,
+    val readerUserName: String?
+)
+
+data class ReadingObservationsReportDto(
+    val year: Int,
+    val month: Int,
+    val monthName: String,
+    val items: List<ReadingObservationItemDto>
 )

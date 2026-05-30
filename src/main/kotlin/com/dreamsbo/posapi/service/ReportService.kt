@@ -10,6 +10,7 @@ import com.dreamsbo.posapi.persistence.repository.BillConceptItemRepository
 import com.dreamsbo.posapi.persistence.repository.JobRepository
 import com.dreamsbo.posapi.persistence.repository.MeetingRepository
 import com.dreamsbo.posapi.persistence.repository.UserRepository
+import com.dreamsbo.posapi.persistence.repository.CashBalanceRepository
 import com.dreamsbo.posapi.util.DateUtil
 import net.sf.jasperreports.engine.JREmptyDataSource
 import net.sf.jasperreports.engine.JasperCompileManager
@@ -47,6 +48,7 @@ class ReportService(
     val meetingRepository: MeetingRepository,
     val userRepository: UserRepository,
     val billingConfigService: BillingConfigService,
+    val cashBalanceRepository: CashBalanceRepository
 ) {
 
     fun generateTicketKitchen(ticketKitchenInputDto: TicketKitchenInputDto): ByteArray? {
@@ -106,7 +108,7 @@ class ReportService(
                 "waterMeterNumber" to (partner.waterMeterNumber ?: "N/A"),
                 "connectionStatus" to (partner.connectionStatus?.name ?: "Sin estado"),
                 "connectionDate" to (partner.connectionDate?.toString() ?: "N/A"),
-                "currentDebt" to partner.currentDebt,
+                "currentDebt" to debtManagementService.calculateTotalDebt(partner.id),
                 "phone" to partner.cellphone
             )
         }
@@ -217,12 +219,19 @@ class ReportService(
         }.reversed()
     }
 
-    fun getMovementReport(startDate: LocalDate, endDate: LocalDate): DailyMovementReportDto {
+    fun getMovementReport(startDate: LocalDate, endDate: LocalDate, userId: java.util.UUID? = null): DailyMovementReportDto {
         val incomeByConcept = mutableMapOf<String, BigDecimal>()
         val expenseByConcept = mutableMapOf<String, BigDecimal>()
 
         // 1. Water Payments
-        val payments = waterPaymentRepository.findByPaymentDateBetweenAndActive(startDate, endDate, true, Sort.by("paymentDate", "createdAt"))
+        var payments = waterPaymentRepository.findByPaymentDateBetweenAndActive(startDate, endDate, true, Sort.by("paymentDate", "createdAt"))
+
+        // Solo incluir movimientos vinculados a un arqueo de caja
+        payments = payments.filter { it.cashBalance != null }
+
+        if (userId != null) {
+            payments = payments.filter { it.user.id == userId }
+        }
 
         payments.forEach { payment ->
             val fines = waterPaymentDetailRepository.findByWaterPaymentIdAndActive(payment.id, true)
@@ -283,7 +292,14 @@ class ReportService(
         // 2. Cash Flows (Manual)
         val startDT = startDate.atStartOfDay().atOffset(ZoneOffset.ofHours(-4))
         val endDT = endDate.plusDays(1).atStartOfDay().atOffset(ZoneOffset.ofHours(-4))
-        val cashFlows = cashFlowRepository.findByCreatedAtBetweenAndActive(startDT, endDT, true, Sort.by("createdAt"))
+        var cashFlows = cashFlowRepository.findByCreatedAtBetweenAndActive(startDT, endDT, true, Sort.by("createdAt"))
+
+        // Solo incluir flujos vinculados a un arqueo de caja
+        cashFlows = cashFlows.filter { it.cashBalance != null }
+
+        if (userId != null) {
+            cashFlows = cashFlows.filter { it.cashBalance.box.user.id == userId }
+        }
 
         cashFlows.forEach { cf ->
             val category = cf.cashFlowType.name // "INGRESO" or "EGRESO"
@@ -308,11 +324,21 @@ class ReportService(
         val totalIncome = incomeByConcept.values.fold(BigDecimal.ZERO, BigDecimal::add)
         val totalExpense = expenseByConcept.values.fold(BigDecimal.ZERO, BigDecimal::add)
 
+        // 3. Aperturas de Caja (Capital Inicial)
+        var cashBalances = cashBalanceRepository.findByOpenTimeBetweenAndActive(startDT, endDT, true)
+        if (userId != null) {
+            cashBalances = cashBalances.filter { it.box.user.id == userId }
+        }
+        val initialCash = cashBalances.sumOf { it.initialMoney }
+        val grandTotal = totalIncome.subtract(totalExpense)
+
         return DailyMovementReportDto(
             concepts = conceptsList.sortedBy { it.type },
             totalIncome = totalIncome,
             totalExpense = totalExpense,
-            grandTotal = totalIncome.subtract(totalExpense)
+            grandTotal = grandTotal,
+            initialCash = initialCash,
+            totalBalance = initialCash.add(grandTotal)
         )
     }
 
@@ -338,6 +364,35 @@ class ReportService(
             month = month,
             monthName = getMonthName(month).uppercase(),
             readings = items
+        )
+    }
+
+    fun getReadingObservationsReport(year: Int, month: Int): ReadingObservationsReportDto {
+        val startDate = LocalDate.of(year, month, 1)
+        val endDate = startDate.plusMonths(1).minusDays(1)
+
+        val readings = waterMeterReadingRepository.findByReadingDateBetweenAndActive(
+            startDate, endDate, true
+        ).filter { it.observation.isNotBlank() }
+         .sortedBy { it.partner.partnerNumber }
+
+        val items = readings.map { reading ->
+            ReadingObservationItemDto(
+                partnerNumber = reading.partner.partnerNumber,
+                partnerName = reading.partner.fullName,
+                readingValue = reading.currentReading,
+                readingDate = reading.readingDate,
+                consumption = reading.consumption,
+                observation = reading.observation,
+                readerUserName = reading.readerUser?.let { "${it.profile.name} ${it.profile.lastname}" }
+            )
+        }
+
+        return ReadingObservationsReportDto(
+            year = year,
+            month = month,
+            monthName = getMonthName(month),
+            items = items
         )
     }
 
@@ -381,7 +436,7 @@ class ReportService(
                 fullName = partner.fullName,
                 identificationNumber = partner.partnerIdentificationNumber,
                 address = partner.waterConnectionAddress ?: partner.address,
-                currentDebt = partner.currentDebt,
+                currentDebt = debtManagementService.calculateTotalDebt(partner.id),
                 statusName = partner.connectionStatus?.name ?: "SIN ESTADO",
                 statusCode = partner.connectionStatus?.code ?: "NONE"
             )

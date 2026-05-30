@@ -90,23 +90,8 @@ class WaterMeterReadingService(
 
         val savedReading = waterMeterReadingRepository.save(reading)
         
-        // Generar automáticamente una factura para esta lectura
-        try {
-            println("🔄 Intentando generar factura para lectura ${savedReading.id} del socio ${partner.id}")
-            val generatedBill = waterBillingService.generateBillFromReading(savedReading.id)
-            println("✅ Factura generada exitosamente: ${generatedBill.billNumber} con estado ${generatedBill.statusCode}")
-        } catch (e: BadRequestException) {
-            // Si el socio no tiene conexión de agua, solo registrar la advertencia
-            println("⚠️ No se generó factura: ${e.message}")
-        } catch (e: NotFoundEntityException) {
-            // Si falta el estado PENDING u otro recurso necesario, registrar el error
-            println("❌ Error crítico al generar factura: ${e.message}")
-            e.printStackTrace()
-        } catch (e: Exception) {
-            // Cualquier otro error
-            println("❌ Error inesperado al generar factura: ${e.message}")
-            e.printStackTrace()
-        }
+        // Generación automática de factura desactivada según nuevo requerimiento. 
+        // Las facturas ahora se generan manualmente (por lote) a través de la UI.
         
         return toWaterMeterReadingOutputDto(savedReading)
     }
@@ -182,9 +167,39 @@ class WaterMeterReadingService(
         val bill = waterBillRepository.findAll().firstOrNull { it.reading?.id == id && it.active }
         
         if (bill != null) {
-            // Usar el servicio de facturación para anular la factura
-            // Esto maneja tanto facturas PENDING (las desactiva) como PAID (las marca como CANCELLED y gestiona reembolsos)
-            waterBillingService.cancelBill(bill.id, userId)
+            // ANULACIÓN DIRECTA (sin clonar) — solo desde eliminación de lectura
+            val cancelledStatus = waterBillingService.findBillStatus("CANCELLED")
+            
+            // Desactivar pagos asociados
+            val payments = waterBillingService.findPaymentsByBill(bill.id)
+            payments.forEach { payment ->
+                payment.active = false
+                waterBillingService.savePayment(payment)
+                
+                // Desactivar detalles del pago
+                val details = waterBillingService.findPaymentDetailsByPayment(payment.id)
+                details.forEach { it.active = false }
+                waterBillingService.savePaymentDetails(details)
+            }
+            
+            // Desactivar conceptos de la factura
+            val concepts = billConceptItemRepository.findByWaterBillIdAndActive(bill.id, true)
+            concepts.forEach { it.active = false }
+            billConceptItemRepository.saveAll(concepts)
+            
+            // Restar la deuda pendiente del socio (lo que quedaba por pagar)
+            val partner = bill.partner
+            partner.currentDebt = partner.currentDebt.subtract(bill.remainingBalance)
+            if (partner.currentDebt < BigDecimal.ZERO) {
+                partner.currentDebt = BigDecimal.ZERO
+            }
+            partnerRepository.save(partner)
+            
+            // Marcar factura como CANCELLED
+            bill.status = cancelledStatus
+            bill.active = false
+            bill.updatedAt = OffsetDateTime.now()
+            waterBillRepository.save(bill)
         }
 
         // Desactivar la lectura

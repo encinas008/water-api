@@ -24,6 +24,11 @@ class WaterBillingController(
         return waterBillingService.createBill(input)
     }
 
+    @GetMapping("/generate-monthly/preview")
+    fun previewMonthlyBills(@RequestParam year: Int, @RequestParam month: Int): com.dreamsbo.posapi.dto.WaterBillGenerationPreviewDto {
+        return waterBillingService.previewMonthlyBills(year, month)
+    }
+
     @PostMapping("/generate-monthly")
     @ResponseStatus(HttpStatus.CREATED)
     fun generateMonthlyBills(@RequestBody input: WaterBillGenerationDto): List<WaterBillOutputDto> {

@@ -26,6 +26,7 @@ import java.math.RoundingMode
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.util.*
 
 @Service
@@ -61,10 +62,29 @@ class WaterBillingService(
         val generatedBills = mutableListOf<WaterBillEntity>()
 
         partners.forEach { partner ->
-            // Only generate bills for partners with water connection
-                val latestReading = waterMeterReadingRepository.findLatestByPartnerId(partner.id, true)
+            // Prevent duplicate bills for the same month and partner
+            val billExists = waterBillRepository.existsByPartnerIdAndBillingPeriodStartAndActive(
+                partner.id,
+                input.billingPeriodStart,
+                true
+            )
+            
+            if (!billExists) {
+                // Obtener la lectura específica de ese mes
+                val readingForMonthList = waterMeterReadingRepository.findByPartnerIdAndYearAndMonth(
+                    partner.id,
+                    input.billingPeriodStart.year,
+                    input.billingPeriodStart.monthValue,
+                    true
+                )
+                val readingForMonth = readingForMonthList.firstOrNull()
+                
+                // Si no hay lectura para este mes, saltar y no generar factura
+                if (readingForMonth == null) {
+                    return@forEach
+                }
 
-                val consumption = latestReading.map { it.consumption }.orElse(BigDecimal.ZERO)
+                val consumption = readingForMonth.consumption
                 
                 // Nueva lógica: Los primeros m3 (configurables por ENV) están incluidos en la Tarifa Básica
                 val threshold = BigDecimal.valueOf(basicConsumptionLimit)
@@ -81,7 +101,7 @@ class WaterBillingService(
                 val bill = WaterBillEntity(
                     billNumber = billNumber,
                     partner = partner,
-                    reading = latestReading.orElse(null),
+                    reading = readingForMonth,
                     billingPeriodStart = input.billingPeriodStart,
                     billingPeriodEnd = input.billingPeriodEnd,
                     consumptionM3 = consumption,
@@ -125,8 +145,63 @@ class WaterBillingService(
                 
                 partnerRepository.save(partner)
             }
+        }
 
         return generatedBills.map { toWaterBillOutputDto(it) }
+    }
+
+
+    fun previewMonthlyBills(year: Int, month: Int): com.dreamsbo.posapi.dto.WaterBillGenerationPreviewDto {
+        val activePartners = partnerRepository.findAllByActive(true, Sort.unsorted())
+        
+        val toGenerate = mutableListOf<com.dreamsbo.posapi.dto.WaterBillPreviewItemDto>()
+        val missingReadings = mutableListOf<com.dreamsbo.posapi.dto.WaterBillPreviewItemDto>()
+        
+        activePartners.forEach { partner ->
+            // Check if bill already exists
+            val periodStart = LocalDate.of(year, month, 1)
+            val billExists = waterBillRepository.existsByPartnerIdAndBillingPeriodStartAndActive(
+                partner.id,
+                periodStart,
+                true
+            )
+            
+            if (!billExists) {
+                val readingForMonth = waterMeterReadingRepository.findByPartnerIdAndYearAndMonth(
+                    partner.id,
+                    year,
+                    month,
+                    true
+                ).firstOrNull()
+                
+                val item = com.dreamsbo.posapi.dto.WaterBillPreviewItemDto(
+                    partnerId = partner.id,
+                    partnerName = partner.fullName,
+                    partnerNumber = partner.partnerNumber.toString(),
+                    hasReading = readingForMonth != null,
+                    readingValue = readingForMonth?.consumption
+                )
+                
+                if (readingForMonth != null) {
+                    toGenerate.add(item)
+                } else {
+                    missingReadings.add(item)
+                }
+            }
+        }
+        
+        // Sort for better presentation
+        toGenerate.sortBy { it.partnerName }
+        missingReadings.sortBy { it.partnerName }
+        
+        return com.dreamsbo.posapi.dto.WaterBillGenerationPreviewDto(
+            month = month,
+            year = year,
+            toGenerateCount = toGenerate.size,
+            missingReadingsCount = missingReadings.size,
+            toGenerate = toGenerate,
+            missingReadings = missingReadings
+        )
     }
 
     fun calculateBillAmount(consumption: BigDecimal, ratePerM3: BigDecimal): BigDecimal {
@@ -144,19 +219,20 @@ class WaterBillingService(
         // El monto de la multa es 50 Bs según requerimiento
         val multaCorteMonto = billingConfigService.getConfigValue("MULTA_CORTE", BigDecimal("50.0"))
         
-        if (currentStatus == "ACTIVE" && unpaidBillsCount >= 4) {
-            println("🚨 SOCIO CON MORA (4 MESES). Cambiando estado a CUT_OFF y aplicando multa de $multaCorteMonto Bs")
+        if (currentStatus == "ACTIVE" && unpaidBillsCount >= 3) {
+            println("🚨 SOCIO CON MORA (3 MESES). Cambiando estado a CUT_OFF y aplicando multa de $multaCorteMonto Bs")
             
             // Cambiar estado a CORTADO
             val cutOffStatus = connectionStatusTypeRepository.findByCodeAndActive("CUT_OFF", true)
                 .orElse(null)
             if (cutOffStatus != null) {
                 partner.connectionStatus = cutOffStatus
+                partner.statusChangedAt = OffsetDateTime.now()
                 
-                // Aplicar multa de 50 Bs
+                // Aplicar multa de 50 Bs por el corte inicial
                 val disconnectionFine = BillConceptItemEntity(
                     waterBill = bill,
-                    conceptName = "Multa por corte de servicio (Mora acumulada de 4 meses)",
+                    conceptName = "Multa por corte de servicio (Mora acumulada de 3 meses)",
                     assignedDate = LocalDate.now(),
                     amount = multaCorteMonto
                 )
@@ -170,31 +246,8 @@ class WaterBillingService(
                 // Actualizar deuda del socio
                 partner.currentDebt = partner.currentDebt.add(multaCorteMonto)
             }
-        } else if (currentStatus == "CUT_OFF") {
-            // "despues de estar en un estado cortado cada 3 meses es multa de 50bs"
-            // Nota: El usuario dice "cada 3 meses", así que en la 3ra, 6ta, 9na... factura adicional después del corte.
-            
-            // Si tiene 7 unpaid bills (4 iniciales + 3 nuevas), 10, 13...
-            if (unpaidBillsCount > 4 && (unpaidBillsCount - 4) % 3 == 0L) {
-                 println("⚠️ SOCIO SIGUE CORTADO (${unpaidBillsCount - 4} meses adicionales). Aplicando multa recurrente de $multaCorteMonto Bs")
-                 
-                 val recurringFine = BillConceptItemEntity(
-                    waterBill = bill,
-                    conceptName = "Multa recurrente por estado cortado",
-                    assignedDate = LocalDate.now(),
-                    amount = multaCorteMonto
-                )
-                billConceptItemRepository.save(recurringFine)
-                
-                // Actualizar totales de la factura
-                bill.totalAmount = bill.totalAmount.add(multaCorteMonto)
-                bill.remainingBalance = bill.remainingBalance.add(multaCorteMonto)
-                waterBillRepository.save(bill)
-                
-                // Actualizar deuda del socio
-                partner.currentDebt = partner.currentDebt.add(multaCorteMonto)
-            }
         }
+        // Nota: El recargo recurrente por permanecer en estado CORTADO se maneja ahora en createDefaultBillConcepts
     }
 
     fun getBillsByPartner(partnerId: UUID): List<WaterBillOutputDto> {
@@ -483,8 +536,9 @@ class WaterBillingService(
         // Obtener multas para incluirlas en la deuda del socio
         val currentFines = monthlyPendingFinesService.getCurrentMonthPendingFines(partner.id)
         
-        // La nueva deuda es: Deuda Anterior + Total Factura + Multas actuales
-        partner.currentDebt = partner.currentDebt.add(finalBill.totalAmount).add(currentFines.totalFines)
+        // La nueva deuda es: Deuda Anterior + Total Factura
+        // (El total de la factura ya incluye las multas del mes si fueron agregadas como conceptos por createDefaultBillConcepts)
+        partner.currentDebt = partner.currentDebt.add(finalBill.totalAmount)
         
         // --- NUEVA LÓGICA DE CONTROL DE CORTE Y MULTAS ---
         checkAndApplyAutoCutoff(partner, finalBill)
@@ -541,10 +595,10 @@ class WaterBillingService(
             )
         } else null
         
-        // Conceptos adicionales fijos (Se omiten para socios CUT_OFF e INACTIVE)
+        // Conceptos adicionales fijos (Se omiten solo para socios INACTIVE)
         val additionalConcepts = mutableListOf<BillConceptItemEntity>()
         
-        if (!isCutOff && !isInactive) {
+        if (!isInactive) {
             additionalConcepts.add(
                 BillConceptItemEntity(
                     waterBill = bill,
@@ -569,6 +623,28 @@ class WaterBillingService(
                     amount = aporteOTB
                 )
             )
+            
+            // Recargo recurrente cada 3 meses para socios CORTADOS
+            if (isCutOff) {
+                val statusChangedAt = bill.partner.statusChangedAt ?: bill.partner.createdAt
+                val currentBillMonth = assignedDate.withDayOfMonth(1)
+                val statusMonth = statusChangedAt.toLocalDate().withDayOfMonth(1)
+                val monthsInStatus = ChronoUnit.MONTHS.between(statusMonth, currentBillMonth)
+                
+                val mesesIntervalo = billingConfigService.getConfigValue("MESES_PARA_CARGO_CORTE", BigDecimal("3")).toLong()
+                val montoRecurrente = billingConfigService.getConfigValue("CARGO_POR_CORTE_RECURRENTE", BigDecimal("50.0"))
+                
+                if (monthsInStatus > 0 && monthsInStatus % mesesIntervalo == 0L) {
+                    additionalConcepts.add(
+                        BillConceptItemEntity(
+                            waterBill = bill,
+                            conceptName = "Recargo recurrente por estado cortado ($monthsInStatus meses)",
+                            assignedDate = assignedDate,
+                            amount = montoRecurrente
+                        )
+                    )
+                }
+            }
         }
 
         // --- LÓGICA: Buscar multas de reuniones, trabajos y otros (como conexión pasiva) ---
@@ -579,15 +655,17 @@ class WaterBillingService(
         )
         
         val jobFines = monthlyFines.jobAbsences.map { fine ->
+            val fineDate = formatDateLiteral(fine.date)
             BillConceptItemEntity(
                 waterBill = bill,
-                conceptName = "Multa Trabajo: ${fine.name}",
+                conceptName = "Multa Trabajo: ${fine.name} ($fineDate)",
                 assignedDate = assignedDate,
                 amount = fine.fine
             )
         }
         
         val meetingAndOtherFines = monthlyFines.meetingAbsences.map { fine ->
+            val fineDate = formatDateLiteral(fine.date)
             val prefix = when(fine.type) {
                 "REUNION" -> "Multa Reunión: "
                 "TRABAJO" -> "Multa Trabajo: "
@@ -595,7 +673,7 @@ class WaterBillingService(
             }
             BillConceptItemEntity(
                 waterBill = bill,
-                conceptName = "$prefix${fine.name}",
+                conceptName = "$prefix${fine.name} ($fineDate)",
                 assignedDate = assignedDate,
                 amount = fine.fine
             )
@@ -822,6 +900,23 @@ class WaterBillingService(
         return toWaterBillOutputDto(savedBill)
     }
 
+    // ──── Métodos auxiliares para uso desde WaterMeterReadingService ────
+    fun findBillStatus(code: String) = billStatusTypeRepository.findByCodeAndActive(code, true)
+        .orElseThrow { NotFoundEntityException("Estado $code no encontrado") }
+
+    fun findPaymentsByBill(billId: UUID) = waterPaymentRepository.findByWaterBillIdAndActive(billId, true)
+
+    fun savePayment(payment: com.dreamsbo.posapi.persistence.entity.WaterPaymentEntity) {
+        waterPaymentRepository.save(payment)
+    }
+
+    fun findPaymentDetailsByPayment(paymentId: UUID) = waterPaymentDetailRepository.findByWaterPaymentIdAndActive(paymentId, true)
+
+    fun savePaymentDetails(details: List<com.dreamsbo.posapi.persistence.entity.WaterPaymentDetailEntity>) {
+        waterPaymentDetailRepository.saveAll(details)
+    }
+    // ──────────────────────────────────────────────────────────────────
+
     @Transactional
     fun cancelBill(id: UUID, userId: UUID): WaterBillOutputDto {
         val bill = waterBillRepository.findById(id)
@@ -834,7 +929,10 @@ class WaterBillingService(
         val cancelledStatus = billStatusTypeRepository.findByCodeAndActive("CANCELLED", true)
             .orElseThrow { NotFoundEntityException("Estado CANCELLED no encontrado") }
 
-        // 1. Manejar devoluciones si hay pagos realizados
+        val pendingStatus = billStatusTypeRepository.findByCodeAndActive("PENDING", true)
+            .orElseThrow { NotFoundEntityException("Estado PENDING no encontrado") }
+
+        // 1. Manejar devoluciones si hay pagos realizados (sin generar egreso de caja)
         val payments = waterPaymentRepository.findByWaterBillIdAndActive(bill.id, true)
         var totalReversedAmount = BigDecimal.ZERO
 
@@ -842,83 +940,79 @@ class WaterBillingService(
             payments.forEach { payment ->
                 totalReversedAmount = totalReversedAmount.add(payment.amount)
                 
-                // Si el pago fue en EFECTIVO, registrar un retiro en caja
-                if (payment.paymentType.name == "EFECTIVO") {
-                    try {
-                        val egresoType = cashFlowTypeRepository.findByNameAndActive("EGRESO", true)
-                            .orElseThrow { BadRequestException("Tipo de flujo EGRESO no encontrado") }
-                        
-                        val efectivoType = payment.paymentType
-
-                        cashFlowService.create(com.dreamsbo.posapi.dto.CashFlowInputDto(
-                            amount = payment.amount,
-                            description = "Devolución Socio ${bill.partner.partnerNumber ?: ""}: ${bill.partner.fullName} - Factura: ${bill.billNumber}",
-                            userId = userId,
-                            cashFlowTypeId = egresoType.id,
-                            paymentTypeId = efectivoType.id
-                        ))
-                    } catch (e: Exception) {
-                        if (e is BadRequestException) throw e
-                        throw BadRequestException("Error al registrar el egreso en caja: ${e.message}")
-                    }
-                }
-
-                // Desactivar el pago
+                // Desactivar el pago sin registrar movimiento de caja
                 payment.active = false
                 waterPaymentRepository.save(payment)
                 
-                // Desactivar detalles del pago (esto hace que las multas vuelvan a estar "pendientes" en MonthlyPendingFinesService)
+                // Desactivar detalles del pago
                 val details = waterPaymentDetailRepository.findByWaterPaymentIdAndActive(payment.id, true)
                 details.forEach { it.active = false }
                 waterPaymentDetailRepository.saveAll(details)
             }
         }
 
-        // 2. Actualizar estado de la factura
+        // 2. Clonar la factura como PENDING con el mismo detalle
+        val newBillNumber = generateBillNumber(bill.partner.id)
+        val newBill = WaterBillEntity(
+            billNumber = newBillNumber,
+            partner = bill.partner,
+            reading = bill.reading, // Mantener la lectura
+            billingPeriodStart = bill.billingPeriodStart,
+            billingPeriodEnd = bill.billingPeriodEnd,
+            consumptionM3 = bill.consumptionM3,
+            ratePerM3 = bill.ratePerM3,
+            baseAmount = bill.baseAmount,
+            totalAmount = bill.totalAmount,
+            remainingBalance = bill.totalAmount, // Inicia con el total pendiente
+            status = pendingStatus,
+            dueDate = bill.dueDate
+        )
+        val savedNewBill = waterBillRepository.save(newBill)
+
+        // 3. Clonar los conceptos a la nueva factura
+        val concepts = billConceptItemRepository.findByWaterBillIdAndActive(bill.id, true)
+        val newConcepts = concepts.map { oldConcept ->
+            BillConceptItemEntity(
+                waterBill = savedNewBill,
+                conceptName = oldConcept.conceptName,
+                assignedDate = oldConcept.assignedDate,
+                amount = oldConcept.amount
+            )
+        }
+        billConceptItemRepository.saveAll(newConcepts)
+
+        // 4. Actualizar estado de la factura original a CANCELLED
         bill.status = cancelledStatus
         bill.updatedAt = OffsetDateTime.now()
         bill.remainingBalance = bill.totalAmount // Restaurar saldo original para consistencia conceptual
         
-        // 3. Desactivar conceptos de la factura para que no aparezcan en reportes de conceptos activos
-        val concepts = billConceptItemRepository.findByWaterBillIdAndActive(bill.id, true)
+        // Desactivar los conceptos de la factura anulada
         concepts.forEach { it.active = false }
         billConceptItemRepository.saveAll(concepts)
 
-        val savedBill = waterBillRepository.save(bill)
+        val savedOldBill = waterBillRepository.save(bill)
 
-        // 5. Desactivar la lectura asociada si existe
-        // Esto permite que el usuario pueda volver a registrar una lectura para el mismo período
-        bill.reading?.let { reading ->
-            reading.active = false
-            reading.updatedAt = OffsetDateTime.now()
-            waterMeterReadingRepository.save(reading)
-        }
-
-        // 4. Revertir impacto en la deuda del socio
-        // Si estaba pagada, la deuda subió cuando se generó la factura y bajó cuando se pagó.
-        // Al anular: 
-        // - Si estaba pendiente: Restamos el total de la factura de la deuda actual.
-        // - Si estaba pagada: Ya se restó el pago de la deuda. Al devolver el dinero (retiro), el socio "recupera" su dinero.
-        //   Pero conceptualmente, si anulamos la factura, el socio ya no debe ese monto.
-        
-        // Lógica correcta de deuda al ANULAR:
-        // La deuda actual del socio tiene en cuenta facturas pendientes y pagos.
-        // Saldo Deuda = Sum(Facturas Pendientes) + Sum(Multas Pendientes)
-        
+        // 5. Ajustar la deuda del socio
         val partner = bill.partner
-        // Restar el monto que aún figuraba como "pendiente" en la factura
-        // Si ya estaba pagada, bill.remainingBalance era 0 (antes de restaurarlo arriba)
-        // Pero usamos el valor ANTES de restaurarlo o calculamos el impacto real.
         
-        // Impacto real en deuda = totalAmount - totalPagado
-        // La deuda del socio incluye el remainingBalance de todas sus facturas activas.
-        // Al anularla, debemos restar su pending balance de la deuda total.
-        
+        // La deuda bajaba por lo que restaba de la factura antigua
         val currentBillPending = bill.totalAmount.subtract(totalReversedAmount)
         partner.currentDebt = partner.currentDebt.subtract(currentBillPending)
+        
+        // Ahora sube por la nueva factura clonada PENDING
+        partner.currentDebt = partner.currentDebt.add(savedNewBill.totalAmount)
+        
         partnerRepository.save(partner)
 
-        return toWaterBillOutputDto(savedBill)
+        // Retornar la antigua factura cancelada para actualizar la vista
+        return toWaterBillOutputDto(savedOldBill)
+    }
+
+    private fun formatDateLiteral(date: LocalDate): String {
+        val day = String.format("%02d", date.dayOfMonth)
+        val monthName = getMonthName(date.monthValue).replaceFirstChar { it.uppercase() }
+        val year = date.year
+        return "$day/$monthName/$year"
     }
 
     private fun getMonthName(month: Int): String {

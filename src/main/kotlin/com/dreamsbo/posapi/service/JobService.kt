@@ -125,13 +125,15 @@ class JobService(
 
         val job = jobEntity.get()
         
-        if (job.locked) {
-            throw BadRequestException("No se puede eliminar este trabajo porque ya está bloqueado.")
-        }
+        // BORRAR REFERENCIAS (Físico)
+        val activeAttendances = jobAttendanceRepository.findByJobIdAndActive(job.id, true)
+        jobAttendanceRepository.deleteAll(activeAttendances)
+        
+        val inactiveAttendances = jobAttendanceRepository.findByJobIdAndActive(job.id, false)
+        jobAttendanceRepository.deleteAll(inactiveAttendances)
 
-        job.active = false
-        job.updatedAt = OffsetDateTime.now()
-        jobRepository.save(job)
+        // ELIMINAR TRABAJO (Físico)
+        jobRepository.delete(job)
     }
 
     private fun toJobOutputDto(entity: JobEntity): JobOutputDto {

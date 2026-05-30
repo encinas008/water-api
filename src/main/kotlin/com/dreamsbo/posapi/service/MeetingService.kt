@@ -162,13 +162,15 @@ class MeetingService(
 
         val meeting = meetingEntity.get()
         
-        if (meeting.locked) {
-            throw BadRequestException("No se puede eliminar esta reunión porque ya está bloqueada.")
-        }
+        // BORRAR REFERENCIAS (Físico)
+        val activeAttendances = meetingAttendanceRepository.findByMeetingIdAndActive(meeting.id, true)
+        meetingAttendanceRepository.deleteAll(activeAttendances)
+        
+        val inactiveAttendances = meetingAttendanceRepository.findByMeetingIdAndActive(meeting.id, false)
+        meetingAttendanceRepository.deleteAll(inactiveAttendances)
 
-        meeting.active = false
-        meeting.updatedAt = OffsetDateTime.now()
-        meetingRepository.save(meeting)
+        // ELIMINAR REUNIÓN (Físico)
+        meetingRepository.delete(meeting)
     }
 
     private fun validateTime(hour: Int, minute: Int, amPm: String) {

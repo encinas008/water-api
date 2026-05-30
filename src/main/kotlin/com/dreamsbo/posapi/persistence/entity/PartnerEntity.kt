@@ -62,6 +62,9 @@ data class PartnerEntity(
     @Column(name = "updated_at", columnDefinition = "TIMESTAMPTZ")
     var updatedAt: OffsetDateTime? = null,
 
+    @Column(name = "status_changed_at", columnDefinition = "TIMESTAMPTZ")
+    var statusChangedAt: OffsetDateTime? = null,
+
     @Column(name = "active", nullable = false)
     var active: Boolean = true,
 )

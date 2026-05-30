@@ -129,8 +129,14 @@ class CashFlowService(
         val cbLinked = cashBalanceRepository.findByIdLocked(cashBalance.get().id)
             .orElseThrow { BadRequestException("No se pudo bloquear el balance de caja") }
             
-        cbLinked.lastCorrelative += 1
-        correlativeNumber = cbLinked.lastCorrelative
+        if (cashFlowTypeOptional.get().name == "EGRESO") {
+            cbLinked.lastCorrelativeExpense += 1
+            correlativeNumber = cbLinked.lastCorrelativeExpense
+        } else {
+            cbLinked.lastCorrelative += 1
+            correlativeNumber = cbLinked.lastCorrelative
+        }
+        
         cashBalanceRepository.save(cbLinked)
 
         val cashFlowSaved = cashFlowRepository.save(

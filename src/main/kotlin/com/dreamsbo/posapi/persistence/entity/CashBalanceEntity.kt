@@ -41,6 +41,9 @@ data class CashBalanceEntity(
     @Column(name = "last_correlative")
     var lastCorrelative: Int = 0,
 
+    @Column(name = "last_correlative_expense")
+    var lastCorrelativeExpense: Int = 0,
+
     var createdAt: OffsetDateTime = OffsetDateTime.now(),
     var updatedAt: OffsetDateTime? = null,
     var active: Boolean = true,
