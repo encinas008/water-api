@@ -15,6 +15,8 @@ import java.util.*
 interface WaterBillRepository : JpaRepository<WaterBillEntity, UUID> {
 
     fun findByPartnerIdAndActive(partnerId: UUID, active: Boolean, sort: Sort): List<WaterBillEntity>
+    
+    fun existsByPartnerIdAndBillingPeriodStartAndActive(partnerId: UUID, billingPeriodStart: LocalDate, active: Boolean): Boolean
 
     @Query("SELECT b FROM WaterBillEntity b WHERE b.partner.id = :partnerId AND b.status.code IN :statusCodes AND b.active = :active")
     fun findByPartnerIdAndStatusCodesInAndActive(

@@ -50,5 +50,10 @@ docker cp <src-path> <container>:<dest-path>
 
 Copy from Contabo
 ```cmd
-scp root@192.168.1.100:/app/myfile.sql ~/Download/
+scp root@157.173.116.93:/app/myfile.sql ~/Downloads/
+```
+
+Restaure your backup from local to contabo
+```cmd
+cat backup20260411-march2026-aligned.sql | ssh root@157.173.116.93 "docker exec -i --user postgres water-db psql -U postgres -d dreamsbo"
 ```
