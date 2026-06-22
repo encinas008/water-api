@@ -42,8 +42,10 @@ class WaterBillingService(
     private val monthlyPendingFinesService: MonthlyPendingFinesService,
     private val cashFlowService: CashFlowService,
     private val cashFlowTypeRepository: CashFlowTypeRepository,
+    private val paymentTypeRepository: PaymentTypeRepository,
     private val billingConfigService: BillingConfigService,
     private val connectionStatusTypeRepository: ConnectionStatusTypeRepository,
+    private val userRepository: UserRepository,
     @Value("\${WATER_BILLING_BASIC_LIMIT:15.0}")
     private val basicConsumptionLimit: Double = 15.0
 ) {
@@ -62,11 +64,10 @@ class WaterBillingService(
         val generatedBills = mutableListOf<WaterBillEntity>()
 
         partners.forEach { partner ->
-            // Prevent duplicate bills for the same month and partner
-            val billExists = waterBillRepository.existsByPartnerIdAndBillingPeriodStartAndActive(
+            // Prevent duplicate bills — ignore CANCELLED bills so they can be regenerated
+            val billExists = waterBillRepository.existsActiveBillExcludingCancelled(
                 partner.id,
-                input.billingPeriodStart,
-                true
+                input.billingPeriodStart
             )
             
             if (!billExists) {
@@ -158,12 +159,11 @@ class WaterBillingService(
         val missingReadings = mutableListOf<com.dreamsbo.posapi.dto.WaterBillPreviewItemDto>()
         
         activePartners.forEach { partner ->
-            // Check if bill already exists
+            // Check if an active, non-cancelled bill already exists for this period
             val periodStart = LocalDate.of(year, month, 1)
-            val billExists = waterBillRepository.existsByPartnerIdAndBillingPeriodStartAndActive(
+            val billExists = waterBillRepository.existsActiveBillExcludingCancelled(
                 partner.id,
-                periodStart,
-                true
+                periodStart
             )
             
             if (!billExists) {
@@ -218,9 +218,10 @@ class WaterBillingService(
         
         // El monto de la multa es 50 Bs según requerimiento
         val multaCorteMonto = billingConfigService.getConfigValue("MULTA_CORTE", BigDecimal("50.0"))
+        val mesesParaCorte = billingConfigService.getConfigValue("MESES_PARA_CORTE", BigDecimal("3")).toInt()
         
-        if (currentStatus == "ACTIVE" && unpaidBillsCount >= 3) {
-            println("🚨 SOCIO CON MORA (3 MESES). Cambiando estado a CUT_OFF y aplicando multa de $multaCorteMonto Bs")
+        if (currentStatus == "ACTIVE" && unpaidBillsCount >= mesesParaCorte) {
+            println("🚨 SOCIO CON MORA ($mesesParaCorte MESES). Cambiando estado a CUT_OFF y aplicando multa de $multaCorteMonto Bs")
             
             // Cambiar estado a CORTADO
             val cutOffStatus = connectionStatusTypeRepository.findByCodeAndActive("CUT_OFF", true)
@@ -229,10 +230,10 @@ class WaterBillingService(
                 partner.connectionStatus = cutOffStatus
                 partner.statusChangedAt = OffsetDateTime.now()
                 
-                // Aplicar multa de 50 Bs por el corte inicial
+                // Aplicar multa por el corte inicial
                 val disconnectionFine = BillConceptItemEntity(
                     waterBill = bill,
-                    conceptName = "Multa por corte de servicio (Mora acumulada de 3 meses)",
+                    conceptName = "Multa por corte de servicio (Mora acumulada de $mesesParaCorte meses)",
                     assignedDate = LocalDate.now(),
                     amount = multaCorteMonto
                 )
@@ -383,8 +384,9 @@ class WaterBillingService(
         val billingPeriodStart = readingDate.withDayOfMonth(1) // Primer día del mes
         val billingPeriodEnd = readingDate.withDayOfMonth(readingDate.lengthOfMonth()) // Último día del mes
         
-        // Calcular fecha de vencimiento (15 días después de la fecha de lectura)
-        val dueDate = readingDate.plusDays(15)
+        // Calcular fecha de vencimiento (configurable desde la fecha de lectura)
+        val diasVencimiento = billingConfigService.getConfigValue("DIAS_VENCIMIENTO_FACTURA", BigDecimal("15")).toLong()
+        val dueDate = readingDate.plusDays(diasVencimiento)
 
         val consumption = reading.consumption
         
@@ -622,7 +624,7 @@ class WaterBillingService(
                     )
                 )
                 
-                // Recargo recurrente cada 3 meses para socios CORTADOS
+                // Recargo recurrente cada X meses para socios CORTADOS
                 if (isCutOff) {
                     val statusChangedAt = bill.partner.statusChangedAt ?: bill.partner.createdAt
                     val currentBillMonth = assignedDate.withDayOfMonth(1)
@@ -762,6 +764,7 @@ class WaterBillingService(
         // we use a computed status for the DTO. This is common after migrations.
         val effectiveStatusCode = when {
             entity.status.code == "CANCELLED" -> "CANCELLED"
+            entity.status.code == "WAIVED" -> "WAIVED"
             entity.status.code == "PAID" -> "PAID"
             // Only force PAID if there's actual payment history or if it was already marked as such
             // This avoids showing 0-amount PENDING bills as PAID if they haven't been processed yet
@@ -776,6 +779,7 @@ class WaterBillingService(
             "PENDING" -> "PENDIENTE"
             "CANCELLED" -> "CANCELADA"
             "OVERDUE" -> "VENCIDA"
+            "WAIVED" -> "CONDONADA"
             else -> entity.status.name
         }
 
@@ -917,6 +921,70 @@ class WaterBillingService(
     // ──────────────────────────────────────────────────────────────────
 
     @Transactional
+    fun waiveBill(id: UUID, userId: UUID): WaterBillOutputDto {
+        val bill = waterBillRepository.findById(id)
+            .orElseThrow { NotFoundEntityException("No se ha encontrado la factura. BillId = $id") }
+
+        if (bill.status.code == "PAID" || bill.status.code == "CANCELLED") {
+            throw BadRequestException("La factura ya está pagada o anulada")
+        }
+
+        val pendingBills = waterBillRepository.findByPartnerIdAndStatusCodesInAndActive(
+            bill.partner.id,
+            listOf("PENDING", "PARTIAL_PAID", "OVERDUE"),
+            true
+        )
+
+        val hasOlderUnpaidBill = pendingBills.any { it.billingPeriodStart.isBefore(bill.billingPeriodStart) }
+        if (hasOlderUnpaidBill) {
+            throw BadRequestException("Existen facturas más antiguas pendientes de pago. Por favor, condone o pague primero las facturas anteriores.")
+        }
+
+        val waivedStatus = billStatusTypeRepository.findByCodeAndActive("WAIVED", true)
+            .orElseGet {
+                val newStatus = com.dreamsbo.posapi.persistence.entity.BillStatusTypeEntity(
+                    code = "WAIVED",
+                    name = "CONDONADA",
+                    description = "Factura condonada"
+                )
+                billStatusTypeRepository.save(newStatus)
+            }
+
+        // El monto que se condona es el saldo pendiente
+        val amountWaived = bill.remainingBalance
+        
+        bill.status = waivedStatus
+        bill.paidAmount = bill.totalAmount
+        bill.remainingBalance = BigDecimal.ZERO
+        bill.paidDate = LocalDate.now()
+        bill.updatedAt = OffsetDateTime.now()
+        bill.waivedBy = userRepository.findById(userId).orElse(null)
+
+        val savedBill = waterBillRepository.save(bill)
+
+        // Actualizar deuda del socio
+        val partner = bill.partner
+        partner.currentDebt = partner.currentDebt.subtract(amountWaived)
+        
+        // Verificar y reactivar si bajó de 4 facturas pendientes
+        val unpaidBillsCount = waterBillRepository.countUnpaidBillsByPartnerId(partner.id)
+        val currentStatus = partner.connectionStatus?.code ?: "ACTIVE"
+        
+        if (currentStatus == "CUT_OFF" && unpaidBillsCount < 4) {
+            println("🔓 REACTIVACIÓN AUTOMÁTICA (Condonación). El socio ${partner.fullName} ya tiene menos de 4 facturas impagas ($unpaidBillsCount). Cambiando a ACTIVE.")
+            val activeStatus = connectionStatusTypeRepository.findByCodeAndActive("ACTIVE", true)
+                .orElse(null)
+            if (activeStatus != null) {
+                partner.connectionStatus = activeStatus
+            }
+        }
+
+        partnerRepository.save(partner)
+
+        return toWaterBillOutputDto(savedBill)
+    }
+
+    @Transactional
     fun cancelBill(id: UUID, userId: UUID): WaterBillOutputDto {
         val bill = waterBillRepository.findById(id)
             .orElseThrow { NotFoundEntityException("No se ha encontrado la factura. BillId = $id") }
@@ -931,15 +999,21 @@ class WaterBillingService(
         val pendingStatus = billStatusTypeRepository.findByCodeAndActive("PENDING", true)
             .orElseThrow { NotFoundEntityException("Estado PENDING no encontrado") }
 
-        // 1. Manejar devoluciones si hay pagos realizados (sin generar egreso de caja)
+        // 1. Manejar devoluciones si hay pagos realizados o si la factura fue pagada
         val payments = waterPaymentRepository.findByWaterBillIdAndActive(bill.id, true)
         var totalReversedAmount = BigDecimal.ZERO
+        var firstPaymentType: UUID? = null
 
         if (payments.isNotEmpty()) {
             payments.forEach { payment ->
                 totalReversedAmount = totalReversedAmount.add(payment.amount)
                 
-                // Desactivar el pago sin registrar movimiento de caja
+                // Guardar el tipo de pago del primer pago para el movimiento de caja
+                if (firstPaymentType == null) {
+                    firstPaymentType = payment.paymentType.id
+                }
+                
+                // Desactivar el pago
                 payment.active = false
                 waterPaymentRepository.save(payment)
                 
@@ -947,6 +1021,39 @@ class WaterBillingService(
                 val details = waterPaymentDetailRepository.findByWaterPaymentIdAndActive(payment.id, true)
                 details.forEach { it.active = false }
                 waterPaymentDetailRepository.saveAll(details)
+            }
+        } else if (bill.status.code == "PAID") {
+            // Si la factura está PAID pero no hay pagos registrados, usar el monto total
+            totalReversedAmount = bill.totalAmount
+            // Obtener tipo de pago por defecto (EFECTIVO)
+            val defaultPaymentType = paymentTypeRepository.findByCodeAndActive("EFECTIVO", true)
+            if (defaultPaymentType.isPresent) {
+                firstPaymentType = defaultPaymentType.get().id
+            }
+        }
+        
+        // Generar egreso en caja por devolución si hay monto reversado
+        if (totalReversedAmount > BigDecimal.ZERO && firstPaymentType != null) {
+            try {
+                val egresoType = cashFlowTypeRepository.findByNameAndActive("EGRESO", true)
+                    .orElseThrow { NotFoundEntityException("Tipo de flujo EGRESO no encontrado") }
+                
+                val cashFlowInput = com.dreamsbo.posapi.dto.CashFlowInputDto(
+                    paymentTypeId = firstPaymentType!!,
+                    cashFlowTypeId = egresoType.id,
+                    amount = totalReversedAmount,
+                    description = "Devolución por anulación factura ${bill.billNumber}",
+                    userId = userId,
+                    cashBalanceId = null
+                )
+                
+                cashFlowService.create(cashFlowInput)
+            } catch (e: BadRequestException) {
+                // No hay dinero o caja cerrada - fallar la anulación
+                throw BadRequestException("No se puede anular: ${e.message}")
+            } catch (e: NotFoundEntityException) {
+                // Si no se encuentra la entidad
+                throw NotFoundEntityException(e.message)
             }
         }
 

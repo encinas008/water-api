@@ -34,7 +34,7 @@ class WaterMeterReadingService(
         val partner = partnerRepository.findById(input.partnerId)
             .orElseThrow { NotFoundEntityException("No se ha encontrado el socio. PartnerId = ${input.partnerId}") }
 
-        // Validar que no exista ya una lectura para este socio en el mismo mes
+        // Validar que no exista ya una lectura ACTIVA para este socio en el mismo mes
         val existingReadings = waterMeterReadingRepository.findByPartnerIdAndYearAndMonth(
             input.partnerId,
             input.readingDate.year,
@@ -43,18 +43,25 @@ class WaterMeterReadingService(
         )
         if (existingReadings.isNotEmpty()) {
             val monthName = getMonthName(input.readingDate.monthValue)
-            throw BadRequestException("Ya existe una lectura registrada para este socio en el mes de $monthName ${input.readingDate.year}. Solo se permite una lectura por mes.")
+            val existingDate = existingReadings.first().readingDate
+            throw BadRequestException("Ya existe una lectura activa para este socio en el mes de $monthName ${input.readingDate.year} (fecha registrada: $existingDate). Elimínela primero antes de registrar una nueva.")
         }
 
-        // Get previous reading (the absolute latest one for field 'previousReading')
-        val previousReadingEntity = waterMeterReadingRepository.findLatestByPartnerId(input.partnerId, true)
+        // Get previous reading: the latest reading BEFORE the input date
+        // This ensures backfilling an older month uses the correct prior reading
+        // e.g. registering April uses March's reading, not May's
+        val previousReadingEntity = waterMeterReadingRepository.findLatestByPartnerIdBeforeDate(
+            input.partnerId, true, input.readingDate
+        )
         val previousReading = previousReadingEntity.map { it.currentReading }.orElse(BigDecimal.ZERO)
 
-        // Si el usuario marca 0, se busca la última lectura NO-CERO
+        // Si el usuario marca 0, se busca la última lectura NO-CERO anterior a la fecha
         val currentReading = if (input.currentReading.compareTo(BigDecimal.ZERO) == 0) {
-            waterMeterReadingRepository.findLatestNonZeroByPartnerId(input.partnerId, true)
+            waterMeterReadingRepository.findLatestNonZeroByPartnerIdBeforeDate(
+                input.partnerId, true, input.readingDate
+            )
                 .map { it.currentReading }
-                .orElse(previousReading) // Si no hay ninguna > 0, usamos la anterior (que será 0)
+                .orElse(previousReading)
         } else {
             input.currentReading
         }

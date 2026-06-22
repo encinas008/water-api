@@ -57,3 +57,9 @@ Restaure your backup from local to contabo
 ```cmd
 cat backup20260411-march2026-aligned.sql | ssh root@157.173.116.93 "docker exec -i --user postgres water-db psql -U postgres -d dreamsbo"
 ```
+
+Copy from local to contabo
+```cmd
+scp backup20260530ForPROD.sql root@157.173.116.93:/app
+```
+

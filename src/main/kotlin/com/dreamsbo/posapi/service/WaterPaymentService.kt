@@ -44,6 +44,19 @@ class WaterPaymentService(
                 .orElseThrow { NotFoundEntityException("No se ha encontrado la factura. BillId = $it") }
         }
 
+        bill?.let { b ->
+            val pendingBills = waterBillRepository.findByPartnerIdAndStatusCodesInAndActive(
+                input.partnerId,
+                listOf("PENDING", "PARTIAL_PAID", "OVERDUE"),
+                true
+            )
+
+            val hasOlderUnpaidBill = pendingBills.any { it.billingPeriodStart.isBefore(b.billingPeriodStart) }
+            if (hasOlderUnpaidBill) {
+                throw BadRequestException("Existen facturas más antiguas pendientes de pago. Por favor, pague primero las facturas anteriores.")
+            }
+        }
+
         val partner = partnerRepository.findById(input.partnerId)
             .orElseThrow { NotFoundEntityException("No se ha encontrado el socio. PartnerId = ${input.partnerId}") }
 

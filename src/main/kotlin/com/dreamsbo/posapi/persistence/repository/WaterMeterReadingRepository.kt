@@ -21,8 +21,22 @@ interface WaterMeterReadingRepository : JpaRepository<WaterMeterReadingEntity, U
     @Query("SELECT r FROM WaterMeterReadingEntity r WHERE r.partner.id = :partnerId AND r.active = :active ORDER BY r.readingDate DESC LIMIT 1")
     fun findLatestByPartnerId(partnerId: UUID, active: Boolean): Optional<WaterMeterReadingEntity>
 
+    @Query("SELECT r FROM WaterMeterReadingEntity r WHERE r.partner.id = :partnerId AND r.active = :active AND r.readingDate < :beforeDate ORDER BY r.readingDate DESC LIMIT 1")
+    fun findLatestByPartnerIdBeforeDate(
+        @Param("partnerId") partnerId: UUID,
+        @Param("active") active: Boolean,
+        @Param("beforeDate") beforeDate: LocalDate
+    ): Optional<WaterMeterReadingEntity>
+
     @Query("SELECT r FROM WaterMeterReadingEntity r WHERE r.partner.id = :partnerId AND r.active = :active AND r.currentReading > 0 ORDER BY r.readingDate DESC LIMIT 1")
     fun findLatestNonZeroByPartnerId(partnerId: UUID, active: Boolean): Optional<WaterMeterReadingEntity>
+
+    @Query("SELECT r FROM WaterMeterReadingEntity r WHERE r.partner.id = :partnerId AND r.active = :active AND r.currentReading > 0 AND r.readingDate < :beforeDate ORDER BY r.readingDate DESC LIMIT 1")
+    fun findLatestNonZeroByPartnerIdBeforeDate(
+        @Param("partnerId") partnerId: UUID,
+        @Param("active") active: Boolean,
+        @Param("beforeDate") beforeDate: LocalDate
+    ): Optional<WaterMeterReadingEntity>
 
     fun findByReadingDateBetweenAndActive(
         startDate: LocalDate,
