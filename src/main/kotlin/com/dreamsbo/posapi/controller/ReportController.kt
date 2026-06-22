@@ -168,4 +168,28 @@ class ReportController(val reportService: ReportService) {
     ): List<WaterBillOutputDto> {
         return reportService.getMonthlyBillsReport(year, month, status)
     }
+
+    @GetMapping("/income")
+    fun getIncomeReport(
+        @RequestParam startDate: String,
+        @RequestParam endDate: String
+    ): com.dreamsbo.posapi.dto.IncomeReportDto {
+        return reportService.getIncomeReport(LocalDate.parse(startDate), LocalDate.parse(endDate))
+    }
+
+    @GetMapping("/expenses")
+    fun getExpenseReport(
+        @RequestParam startDate: String,
+        @RequestParam endDate: String
+    ): com.dreamsbo.posapi.dto.ExpenseReportDto {
+        return reportService.getExpenseReport(LocalDate.parse(startDate), LocalDate.parse(endDate))
+    }
+
+    @GetMapping("/waived")
+    fun getWaivedReport(
+        @RequestParam startDate: String,
+        @RequestParam endDate: String
+    ): com.dreamsbo.posapi.dto.WaivedReportDto {
+        return reportService.getWaivedReport(LocalDate.parse(startDate), LocalDate.parse(endDate))
+    }
 }

@@ -952,4 +952,116 @@ class ReportService(
         val assignedDate: String,
         val amount: BigDecimal
     )
+
+    fun getIncomeReport(startDate: LocalDate, endDate: LocalDate): IncomeReportDto {
+        val payments = waterPaymentRepository.findByPaymentDateBetweenAndActive(startDate, endDate, true, Sort.by("paymentDate", "createdAt"))
+        
+        var totalGlobalIncome = BigDecimal.ZERO
+        val items = payments.mapIndexed { index, payment ->
+            val bill = payment.waterBill
+            var tarifaBasica = BigDecimal.ZERO
+            var aporteOtb = BigDecimal.ZERO
+            var aporteDeporte = BigDecimal.ZERO
+            var otros = BigDecimal.ZERO
+
+            if (bill != null) {
+                val concepts = billConceptItemRepository.findByWaterBillIdAndActive(bill.id, true)
+                concepts.forEach { concept ->
+                    when (concept.conceptName.trim().lowercase()) {
+                        "tarifa básica", "tarifa basica" -> tarifaBasica = tarifaBasica.add(concept.amount)
+                        "aporte a la otb", "aporte otb" -> aporteOtb = aporteOtb.add(concept.amount)
+                        "aporte al deporte", "aporte deporte" -> aporteDeporte = aporteDeporte.add(concept.amount)
+                        else -> otros = otros.add(concept.amount)
+                    }
+                }
+            }
+
+            val fines = waterPaymentDetailRepository.findByWaterPaymentIdAndActive(payment.id, true)
+            fines.forEach { fine ->
+                otros = otros.add(fine.fineAmount)
+            }
+
+            totalGlobalIncome = totalGlobalIncome.add(payment.amount)
+
+            IncomeReportItemDto(
+                nro = payment.correlativeNumber ?: (index + 1),
+                fecha = payment.paymentDate,
+                nombreSocio = payment.partner.fullName,
+                numeroSocio = payment.partner.partnerNumber ?: 0L,
+                tarifaBasica = tarifaBasica,
+                aporteOtb = aporteOtb,
+                aporteDeporte = aporteDeporte,
+                otros = otros,
+                total = payment.amount,
+                responsable = payment.user.username
+            )
+        }
+
+        return IncomeReportDto(
+            items = items,
+            totalIncome = totalGlobalIncome
+        )
+    }
+
+    fun getExpenseReport(startDate: LocalDate, endDate: LocalDate): ExpenseReportDto {
+        val startDT = startDate.atStartOfDay().atOffset(ZoneOffset.ofHours(-4))
+        val endDT = endDate.plusDays(1).atStartOfDay().atOffset(ZoneOffset.ofHours(-4))
+        var cashFlows = cashFlowRepository.findByCreatedAtBetweenAndActive(startDT, endDT, true, Sort.by("createdAt"))
+        
+        // Filter by type "EGRESO"
+        cashFlows = cashFlows.filter { it.cashFlowType.name.equals("EGRESO", ignoreCase = true) }
+
+        var totalGlobalExpense = BigDecimal.ZERO
+        val items = cashFlows.mapIndexed { index, flow ->
+            totalGlobalExpense = totalGlobalExpense.add(flow.amount)
+            ExpenseReportItemDto(
+                nro = flow.correlativeNumber ?: (index + 1),
+                fecha = flow.createdAt.toLocalDate(),
+                detalle = if (flow.description.isNotBlank()) flow.description else flow.cashFlowType.name,
+                total = flow.amount,
+                responsable = flow.cashBalance.box.user.username
+            )
+        }
+
+        return ExpenseReportDto(
+            items = items,
+            totalExpense = totalGlobalExpense
+        )
+    }
+
+    fun getWaivedReport(startDate: LocalDate, endDate: LocalDate): WaivedReportDto {
+        // Obtenemos todas las facturas en estado WAIVED cuya fecha de condonación (paidDate) esté en el rango
+        // Si paidDate es nulo, usamos updatedAt o createdAt. Como asumo que añadimos paidDate en la condonación, filtramos en memoria por si acaso.
+        val bills = waterBillRepository.findByStatusCodeAndActive("WAIVED", true)
+            .filter {
+                val condonDate = it.paidDate ?: it.updatedAt?.toLocalDate() ?: it.createdAt.toLocalDate()
+                !condonDate.isBefore(startDate) && !condonDate.isAfter(endDate)
+            }
+            .sortedBy { it.paidDate ?: it.updatedAt?.toLocalDate() ?: it.createdAt.toLocalDate() }
+
+        var totalGlobalWaived = BigDecimal.ZERO
+        val items = bills.mapIndexed { index, bill ->
+            val condonDate = bill.paidDate ?: bill.updatedAt?.toLocalDate() ?: bill.createdAt.toLocalDate()
+            val mesFacturado = "${getMonthName(bill.billingPeriodStart.monthValue).uppercase()} ${bill.billingPeriodStart.year}"
+            
+            // El total condonado es típicamente el total de la factura
+            val totalCondonado = bill.totalAmount
+            totalGlobalWaived = totalGlobalWaived.add(totalCondonado)
+
+            WaivedReportItemDto(
+                nro = index + 1,
+                fecha = condonDate,
+                nombreSocio = bill.partner.fullName,
+                numeroSocio = bill.partner.partnerNumber ?: 0L,
+                mesFacturado = mesFacturado,
+                totalCondonado = totalCondonado,
+                responsable = bill.waivedBy?.username ?: "-"
+            )
+        }
+
+        return WaivedReportDto(
+            items = items,
+            totalWaived = totalGlobalWaived
+        )
+    }
 }

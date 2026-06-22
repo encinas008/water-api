@@ -65,6 +65,10 @@ data class WaterBillEntity(
     @Column(name = "paid_date")
     var paidDate: LocalDate? = null,
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "waived_by")
+    var waivedBy: UserEntity? = null,
+
     var createdAt: OffsetDateTime = OffsetDateTime.now(),
     var updatedAt: OffsetDateTime? = null,
     var active: Boolean = true,

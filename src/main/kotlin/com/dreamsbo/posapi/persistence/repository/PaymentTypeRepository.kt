@@ -9,4 +9,6 @@ import java.util.*
 interface PaymentTypeRepository : JpaRepository<PaymentTypeEntity, UUID> {
 
     fun findAllByActive(active: Boolean): MutableSet<PaymentTypeEntity>
+    
+    fun findByCodeAndActive(code: String, active: Boolean): Optional<PaymentTypeEntity>
 }

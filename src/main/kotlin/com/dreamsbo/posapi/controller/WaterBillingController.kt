@@ -102,4 +102,12 @@ class WaterBillingController(
     ): WaterBillOutputDto {
         return waterBillingService.cancelBill(id, userId)
     }
+
+    @PostMapping("/{id}/waive")
+    fun waiveBill(
+        @PathVariable id: UUID,
+        @RequestParam userId: UUID
+    ): WaterBillOutputDto {
+        return waterBillingService.waiveBill(id, userId)
+    }
 }

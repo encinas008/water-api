@@ -18,6 +18,12 @@ interface WaterBillRepository : JpaRepository<WaterBillEntity, UUID> {
     
     fun existsByPartnerIdAndBillingPeriodStartAndActive(partnerId: UUID, billingPeriodStart: LocalDate, active: Boolean): Boolean
 
+    @Query("SELECT COUNT(b) > 0 FROM WaterBillEntity b WHERE b.partner.id = :partnerId AND b.billingPeriodStart = :periodStart AND b.active = true AND b.status.code NOT IN ('CANCELLED')")
+    fun existsActiveBillExcludingCancelled(
+        @Param("partnerId") partnerId: UUID,
+        @Param("periodStart") periodStart: LocalDate
+    ): Boolean
+
     @Query("SELECT b FROM WaterBillEntity b WHERE b.partner.id = :partnerId AND b.status.code IN :statusCodes AND b.active = :active")
     fun findByPartnerIdAndStatusCodesInAndActive(
         @Param("partnerId") partnerId: UUID,
