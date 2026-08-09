@@ -24,6 +24,12 @@ interface WaterBillRepository : JpaRepository<WaterBillEntity, UUID> {
         @Param("periodStart") periodStart: LocalDate
     ): Boolean
 
+    @Query("SELECT b FROM WaterBillEntity b WHERE b.partner.id IN :partnerIds AND b.billingPeriodStart = :periodStart AND b.status.code IN ('PENDING', 'PARTIAL_PAID') AND b.active = true")
+    fun findPendingOrPartialPaidBillsForPartnersInPeriod(
+        @Param("partnerIds") partnerIds: List<UUID>,
+        @Param("periodStart") periodStart: LocalDate
+    ): List<WaterBillEntity>
+
     @Query("SELECT b FROM WaterBillEntity b WHERE b.partner.id = :partnerId AND b.status.code IN :statusCodes AND b.active = :active")
     fun findByPartnerIdAndStatusCodesInAndActive(
         @Param("partnerId") partnerId: UUID,
@@ -111,6 +117,23 @@ interface WaterBillRepository : JpaRepository<WaterBillEntity, UUID> {
 
     @Query("SELECT b.partner.id FROM WaterBillEntity b WHERE b.active = true AND b.status.code IN ('PENDING', 'OVERDUE', 'PARTIAL_PAID') GROUP BY b.partner.id HAVING COUNT(b.id) >= :minCount")
     fun findPartnerIdsWithPendingBillsCount(@Param("minCount") minCount: Long): List<UUID>
+
+    @Query("SELECT b.partner.id FROM WaterBillEntity b WHERE b.active = true AND b.status.code = 'PENDING' GROUP BY b.partner.id HAVING COUNT(b.id) >= :minCount")
+    fun findPartnerIdsWithStrictlyPendingBillsCount(@Param("minCount") minCount: Long): List<UUID>
+
+    @Query("""
+        SELECT DISTINCT b.partner.id 
+        FROM WaterBillEntity b, BillConceptItemEntity c 
+        WHERE c.waterBill.id = b.id 
+        AND b.active = true 
+        AND b.status.code = 'PENDING' 
+        AND b.billingPeriodStart >= :startDate 
+        AND LOWER(c.conceptName) LIKE LOWER(CONCAT('%', :conceptName, '%'))
+    """)
+    fun findPartnerIdsWithPendingConceptInPeriod(
+        @Param("conceptName") conceptName: String,
+        @Param("startDate") startDate: LocalDate
+    ): List<UUID>
 
     fun findByPaidDateBetweenAndActive(startDate: LocalDate, endDate: LocalDate, active: Boolean): List<WaterBillEntity>
 }

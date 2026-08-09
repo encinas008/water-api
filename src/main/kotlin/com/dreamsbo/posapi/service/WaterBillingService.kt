@@ -261,7 +261,7 @@ class WaterBillingService(
     }
 
     fun getPendingBills(): List<WaterBillOutputDto> {
-        val bills = waterBillRepository.findByStatusCodesAndActive(listOf("PENDING", "PARTIAL_PAID"), true)
+        val bills = waterBillRepository.findByStatusCodesAndActive(listOf("PENDING"), true)
         return bills.map { toWaterBillOutputDto(it) }
     }
 
@@ -751,8 +751,14 @@ class WaterBillingService(
             
             val conceptNames = concepts.map { it.conceptName.lowercase().trim() }
         pendingFines = allFines.filter { fine ->
-            val fineNameLower = fine.name.lowercase().trim()
-            conceptNames.none { it.contains(fineNameLower) }
+            val formattedDateLower = formatDateLiteral(fine.date).lowercase()
+            val isAlreadyBilled = concepts.any { concept ->
+                val conceptNameLower = concept.conceptName.lowercase()
+                conceptNameLower.contains(formattedDateLower) &&
+                (conceptNameLower.contains("multa") || conceptNameLower.contains("aull")) &&
+                concept.amount.compareTo(fine.fine) == 0
+            }
+            !isAlreadyBilled
         }
         totalFinesAmount = pendingFines.sumOf { it.fine }
     }
@@ -931,7 +937,7 @@ class WaterBillingService(
 
         val pendingBills = waterBillRepository.findByPartnerIdAndStatusCodesInAndActive(
             bill.partner.id,
-            listOf("PENDING", "PARTIAL_PAID", "OVERDUE"),
+            listOf("PENDING"),
             true
         )
 
@@ -999,20 +1005,13 @@ class WaterBillingService(
         val pendingStatus = billStatusTypeRepository.findByCodeAndActive("PENDING", true)
             .orElseThrow { NotFoundEntityException("Estado PENDING no encontrado") }
 
-        // 1. Manejar devoluciones si hay pagos realizados o si la factura fue pagada
+        val originalRemainingBalance = bill.remainingBalance
+
+        // 1. Manejar devoluciones si hay pagos realizados desactivándolos (sin generar egreso en caja)
         val payments = waterPaymentRepository.findByWaterBillIdAndActive(bill.id, true)
-        var totalReversedAmount = BigDecimal.ZERO
-        var firstPaymentType: UUID? = null
 
         if (payments.isNotEmpty()) {
             payments.forEach { payment ->
-                totalReversedAmount = totalReversedAmount.add(payment.amount)
-                
-                // Guardar el tipo de pago del primer pago para el movimiento de caja
-                if (firstPaymentType == null) {
-                    firstPaymentType = payment.paymentType.id
-                }
-                
                 // Desactivar el pago
                 payment.active = false
                 waterPaymentRepository.save(payment)
@@ -1021,39 +1020,6 @@ class WaterBillingService(
                 val details = waterPaymentDetailRepository.findByWaterPaymentIdAndActive(payment.id, true)
                 details.forEach { it.active = false }
                 waterPaymentDetailRepository.saveAll(details)
-            }
-        } else if (bill.status.code == "PAID") {
-            // Si la factura está PAID pero no hay pagos registrados, usar el monto total
-            totalReversedAmount = bill.totalAmount
-            // Obtener tipo de pago por defecto (EFECTIVO)
-            val defaultPaymentType = paymentTypeRepository.findByCodeAndActive("EFECTIVO", true)
-            if (defaultPaymentType.isPresent) {
-                firstPaymentType = defaultPaymentType.get().id
-            }
-        }
-        
-        // Generar egreso en caja por devolución si hay monto reversado
-        if (totalReversedAmount > BigDecimal.ZERO && firstPaymentType != null) {
-            try {
-                val egresoType = cashFlowTypeRepository.findByNameAndActive("EGRESO", true)
-                    .orElseThrow { NotFoundEntityException("Tipo de flujo EGRESO no encontrado") }
-                
-                val cashFlowInput = com.dreamsbo.posapi.dto.CashFlowInputDto(
-                    paymentTypeId = firstPaymentType!!,
-                    cashFlowTypeId = egresoType.id,
-                    amount = totalReversedAmount,
-                    description = "Devolución por anulación factura ${bill.billNumber}",
-                    userId = userId,
-                    cashBalanceId = null
-                )
-                
-                cashFlowService.create(cashFlowInput)
-            } catch (e: BadRequestException) {
-                // No hay dinero o caja cerrada - fallar la anulación
-                throw BadRequestException("No se puede anular: ${e.message}")
-            } catch (e: NotFoundEntityException) {
-                // Si no se encuentra la entidad
-                throw NotFoundEntityException(e.message)
             }
         }
 
@@ -1101,9 +1067,8 @@ class WaterBillingService(
         // 5. Ajustar la deuda del socio
         val partner = bill.partner
         
-        // La deuda bajaba por lo que restaba de la factura antigua
-        val currentBillPending = bill.totalAmount.subtract(totalReversedAmount)
-        partner.currentDebt = partner.currentDebt.subtract(currentBillPending)
+        // La deuda bajaba por el saldo pendiente que tenía la factura antigua
+        partner.currentDebt = partner.currentDebt.subtract(originalRemainingBalance)
         
         // Ahora sube por la nueva factura clonada PENDING
         partner.currentDebt = partner.currentDebt.add(savedNewBill.totalAmount)

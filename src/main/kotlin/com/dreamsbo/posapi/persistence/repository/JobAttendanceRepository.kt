@@ -34,6 +34,12 @@ interface JobAttendanceRepository : JpaRepository<JobAttendanceEntity, UUID> {
         active: Boolean
     ): Optional<JobAttendanceEntity>
     
+    fun findByJobIdAndPartnerIdAndAttendanceDate(
+        jobId: UUID,
+        partnerId: UUID,
+        date: LocalDate
+    ): Optional<JobAttendanceEntity>
+    
     @Query("SELECT a FROM JobAttendanceEntity a WHERE a.partner.id = :partnerId AND a.attendanceDate BETWEEN :startDate AND :endDate AND a.active = :active AND a.job.active = :active AND a.present = false")
     fun findAbsencesByPartnerAndDateRange(
         @Param("partnerId") partnerId: UUID,

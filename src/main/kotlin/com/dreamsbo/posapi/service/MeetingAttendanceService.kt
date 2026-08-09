@@ -6,6 +6,7 @@ import com.dreamsbo.posapi.dto.*
 import com.dreamsbo.posapi.persistence.entity.MeetingAttendanceEntity
 import com.dreamsbo.posapi.persistence.entity.MeetingEntity
 import com.dreamsbo.posapi.persistence.entity.PartnerEntity
+import com.dreamsbo.posapi.persistence.entity.WaterBillEntity
 import com.dreamsbo.posapi.persistence.repository.MeetingAttendanceRepository
 import com.dreamsbo.posapi.persistence.repository.MeetingRepository
 import com.dreamsbo.posapi.persistence.repository.PartnerRepository
@@ -22,6 +23,8 @@ class MeetingAttendanceService(
     private val meetingRepository: MeetingRepository,
     private val partnerRepository: PartnerRepository,
     private val billingConfigService: BillingConfigService,
+    private val waterBillRepository: com.dreamsbo.posapi.persistence.repository.WaterBillRepository,
+    private val billConceptItemRepository: com.dreamsbo.posapi.persistence.repository.BillConceptItemRepository
 ) {
 
     fun getAttendanceByMeeting(meetingId: UUID): List<MeetingAttendanceOutputDto> {
@@ -47,7 +50,7 @@ class MeetingAttendanceService(
         }
 
         val meeting = meetingEntity.get()
-        if (meeting.locked || meeting.meetingDate.plusDays(2).isBefore(LocalDate.now())) {
+        if (meeting.locked) {
             throw BadRequestException("No se pueden registrar asistencias para esta reunión porque está bloqueada.")
         }
 
@@ -59,17 +62,17 @@ class MeetingAttendanceService(
                 continue // Saltar si el socio no existe
             }
 
-            // Verificar si ya existe
-            val existingAttendance = meetingAttendanceRepository.findByMeetingIdAndPartnerIdAndDate(
+            // Verificar si ya existe (incluyendo inactivos)
+            val existingAttendance = meetingAttendanceRepository.findByMeetingIdAndPartnerIdAndAttendanceDate(
                 input.meetingId,
                 partnerAttendance.partnerId,
-                input.attendanceDate,
-                true
+                input.attendanceDate
             )
 
-            if (existingAttendance.isPresent) {
-                // Actualizar existente
+            val savedAttendance = if (existingAttendance.isPresent) {
+                // Actualizar existente o reactivar
                 val attendance = existingAttendance.get()
+                attendance.active = true
                 attendance.present = partnerAttendance.present
                 attendance.checkInTime = partnerAttendance.checkInTime
                 attendance.checkOutTime = partnerAttendance.checkOutTime
@@ -82,8 +85,7 @@ class MeetingAttendanceService(
                     attendance.lateFine = java.math.BigDecimal.ZERO
                 }
                 
-                val updated = meetingAttendanceRepository.save(attendance)
-                createdAttendances.add(toMeetingAttendanceOutputDto(updated))
+                meetingAttendanceRepository.save(attendance)
             } else {
                 // Crear nuevo
                 val attendance = MeetingAttendanceEntity(
@@ -100,9 +102,11 @@ class MeetingAttendanceService(
                     attendance.lateFine = calculateLateFine(meetingEntity.get(), attendance.checkInTime!!)
                 }
                 
-                val saved = meetingAttendanceRepository.save(attendance)
-                createdAttendances.add(toMeetingAttendanceOutputDto(saved))
+                meetingAttendanceRepository.save(attendance)
             }
+            
+            syncMeetingFineWithBill(savedAttendance)
+            createdAttendances.add(toMeetingAttendanceOutputDto(savedAttendance))
         }
 
         return createdAttendances
@@ -117,7 +121,7 @@ class MeetingAttendanceService(
 
         val attendance = attendanceEntity.get()
 
-        if (attendance.meeting.locked || attendance.meeting.meetingDate.plusDays(2).isBefore(LocalDate.now())) {
+        if (attendance.meeting.locked) {
             throw BadRequestException("No se puede editar esta asistencia porque la reunión está bloqueada.")
         }
 
@@ -134,6 +138,7 @@ class MeetingAttendanceService(
         }
 
         val updatedAttendance = meetingAttendanceRepository.save(attendance)
+        syncMeetingFineWithBill(updatedAttendance)
         return toMeetingAttendanceOutputDto(updatedAttendance)
     }
 
@@ -146,13 +151,14 @@ class MeetingAttendanceService(
 
         val attendance = attendanceEntity.get()
         
-        if (attendance.meeting.locked || attendance.meeting.meetingDate.plusDays(2).isBefore(LocalDate.now())) {
+        if (attendance.meeting.locked) {
             throw BadRequestException("No se puede eliminar esta asistencia porque la reunión está bloqueada.")
         }
 
         attendance.active = false
         attendance.updatedAt = OffsetDateTime.now()
-        meetingAttendanceRepository.save(attendance)
+        val saved = meetingAttendanceRepository.save(attendance)
+        syncMeetingFineWithBill(saved)
     }
 
     // Métodos para reemplazar funcionalidad de MeetingPartnerService
@@ -212,21 +218,34 @@ class MeetingAttendanceService(
 
         val meeting = meetingEntity.get()
         
-        if (meeting.locked || meeting.meetingDate.plusDays(2).isBefore(LocalDate.now())) {
+        if (meeting.locked) {
             throw BadRequestException("No se pueden asignar socios a esta reunión porque está bloqueada.")
         }
 
         val meetingDate = meeting.meetingDate
+        val periodStart = meetingDate.withDayOfMonth(1)
 
-        // Obtener todos los registros de asistencia activos para esta reunión
-        val existingAttendances = meetingAttendanceRepository.findByMeetingIdAndActive(meetingId, true)
+        // Optimización N+1: Pre-cargar todas las asistencias
+        val allAttendances = meetingAttendanceRepository.findByMeetingId(meetingId)
+        val attendancesByPartnerId = allAttendances.associateBy { it.partner.id }
+
+        // Optimización N+1: Pre-cargar todos los socios
+        val allPartnerIds = input.partnerIds + allAttendances.map { it.partner.id }
+        val partnersById = partnerRepository.findAllById(allPartnerIds).associateBy { it.id }
+
+        // Optimización N+1: Pre-cargar facturas pendientes
+        val pendingBills = waterBillRepository.findPendingOrPartialPaidBillsForPartnersInPeriod(allPartnerIds.toList(), periodStart)
+        val pendingBillsByPartnerId = pendingBills.associateBy { it.partner.id }
+
+        val attendancesToSave = mutableListOf<MeetingAttendanceEntity>()
 
         // Desactivar registros de socios que no están en la nueva lista
-        existingAttendances.forEach { attendance ->
+        val existingActiveAttendances = allAttendances.filter { it.active }
+        existingActiveAttendances.forEach { attendance ->
             if (!input.partnerIds.contains(attendance.partner.id)) {
                 attendance.active = false
                 attendance.updatedAt = OffsetDateTime.now()
-                meetingAttendanceRepository.save(attendance)
+                attendancesToSave.add(attendance)
             }
         }
 
@@ -234,41 +253,40 @@ class MeetingAttendanceService(
         val newAttendances = mutableListOf<MeetingAttendanceEntity>()
         
         for (partnerId in input.partnerIds) {
-            val partnerEntity = partnerRepository.findById(partnerId)
-            if (partnerEntity.isEmpty) {
-                continue // Saltar si el socio no existe
-            }
+            val partner = partnersById[partnerId]
+            if (partner == null) continue 
 
-            val partner = partnerEntity.get()
+            val existingAttendance = attendancesByPartnerId[partnerId]
             
-            // Verificar si ya existe un registro de asistencia para este socio en esta fecha
-            val existingAttendance = meetingAttendanceRepository.findByMeetingIdAndPartnerIdAndDate(
-                meetingId,
-                partnerId,
-                meetingDate,
-                true
-            )
-            
-            if (existingAttendance.isPresent) {
+            if (existingAttendance != null && existingAttendance.attendanceDate == meetingDate) {
                 // Reactivar si estaba inactivo
-                val attendance = existingAttendance.get()
-                if (!attendance.active) {
-                    attendance.active = true
-                    attendance.updatedAt = OffsetDateTime.now()
-                    meetingAttendanceRepository.save(attendance)
+                if (!existingAttendance.active) {
+                    existingAttendance.active = true
+                    existingAttendance.present = false // Por defecto ausente al asignar
+                    existingAttendance.updatedAt = OffsetDateTime.now()
+                    attendancesToSave.add(existingAttendance)
                 }
-                newAttendances.add(attendance)
+                newAttendances.add(existingAttendance)
             } else {
-                // Crear nuevo registro de asistencia (por defecto ausente)
+                // Crear nuevo registro
                 val newAttendance = MeetingAttendanceEntity(
                     meeting = meeting,
                     partner = partner,
                     attendanceDate = meetingDate,
-                    present = false // Por defecto ausente, se puede cambiar después
+                    present = false
                 )
-                val saved = meetingAttendanceRepository.save(newAttendance)
-                newAttendances.add(saved)
+                attendancesToSave.add(newAttendance)
+                newAttendances.add(newAttendance)
             }
+        }
+
+        // Guardar asistencias en batch
+        val savedAttendances = meetingAttendanceRepository.saveAll(attendancesToSave)
+
+        // Sincronizar multas usando caché
+        savedAttendances.forEach { savedAttendance ->
+            val prefetchedBill = pendingBillsByPartnerId[savedAttendance.partner.id]
+            syncMeetingFineWithBill(savedAttendance, prefetchedBill, true)
         }
 
         return newAttendances.map { toMeetingAttendanceOutputDto(it) }
@@ -283,7 +301,8 @@ class MeetingAttendanceService(
         attendances.forEach { attendance ->
             attendance.active = false
             attendance.updatedAt = OffsetDateTime.now()
-            meetingAttendanceRepository.save(attendance)
+            val saved = meetingAttendanceRepository.save(attendance)
+            syncMeetingFineWithBill(saved)
         }
     }
 
@@ -334,6 +353,120 @@ class MeetingAttendanceService(
             }
         } else {
             java.math.BigDecimal.ZERO
+        }
+    }
+
+    private fun syncMeetingFineWithBill(
+        attendance: MeetingAttendanceEntity,
+        prefetchedBill: WaterBillEntity? = null,
+        usePrefetchedBill: Boolean = false
+    ) {
+        val partner = attendance.partner
+        val meeting = attendance.meeting
+        val isAbsent = !attendance.present && attendance.active
+        val hasLateFine = attendance.present && attendance.lateFine > java.math.BigDecimal.ZERO && attendance.active
+
+        // Buscar factura PENDING o PARTIAL_PAID del mismo mes
+        val periodStart = attendance.attendanceDate.withDayOfMonth(1)
+        
+        val bill = if (usePrefetchedBill) {
+            prefetchedBill
+        } else {
+            val bills = waterBillRepository.findByPartnerIdAndActive(partner.id, true, Sort.unsorted())
+            bills.firstOrNull { 
+                it.billingPeriodStart == periodStart && 
+                it.status.code == "PENDING" 
+            }
+        }
+
+        if (bill != null) {
+            val fineDate = formatDateLiteral(attendance.attendanceDate)
+            
+            // Si es falta, se usa la multa de la reunión. Si es retraso, se usa lateFine.
+            val typeExtra = if (hasLateFine) " (RETRASO)" else ""
+            val conceptName = "Multa Reunión: ${meeting.name}$typeExtra ($fineDate)"
+            
+            val existingConcepts = billConceptItemRepository.findByWaterBillIdAndActive(bill.id, true)
+            // Tenemos que buscar si hay un concepto existente de esta reunión para este socio
+            val conceptPrefix = "Multa Reunión: ${meeting.name}"
+            val existingConcept = existingConcepts.firstOrNull { it.conceptName.startsWith(conceptPrefix) && it.conceptName.contains(fineDate) }
+
+            val shouldHaveFine = isAbsent || hasLateFine
+            val expectedAmount = if (isAbsent) meeting.fine else if (hasLateFine) attendance.lateFine else java.math.BigDecimal.ZERO
+            
+            if (shouldHaveFine && expectedAmount > java.math.BigDecimal.ZERO) {
+                if (existingConcept == null) {
+                    // Agregar nueva multa
+                    val newConcept = com.dreamsbo.posapi.persistence.entity.BillConceptItemEntity(
+                        waterBill = bill,
+                        conceptName = conceptName,
+                        assignedDate = attendance.attendanceDate,
+                        amount = expectedAmount
+                    )
+                    billConceptItemRepository.save(newConcept)
+                    
+                    bill.totalAmount = bill.totalAmount.add(expectedAmount)
+                    bill.remainingBalance = bill.remainingBalance.add(expectedAmount)
+                    waterBillRepository.save(bill)
+                    
+                    partner.currentDebt = partner.currentDebt.add(expectedAmount)
+                    partnerRepository.save(partner)
+                } else if (existingConcept.conceptName != conceptName || existingConcept.amount != expectedAmount) {
+                    // Actualizar multa existente (cambió de falta a retraso o monto)
+                    val oldAmount = existingConcept.amount
+                    
+                    existingConcept.conceptName = conceptName
+                    existingConcept.amount = expectedAmount
+                    billConceptItemRepository.save(existingConcept)
+                    
+                    val difference = expectedAmount.subtract(oldAmount)
+                    bill.totalAmount = bill.totalAmount.add(difference)
+                    bill.remainingBalance = bill.remainingBalance.add(difference)
+                    waterBillRepository.save(bill)
+                    
+                    partner.currentDebt = partner.currentDebt.add(difference)
+                    partnerRepository.save(partner)
+                }
+            } else {
+                // No debería tener multa (estuvo presente a tiempo, o desasignado)
+                if (existingConcept != null) {
+                    existingConcept.active = false
+                    billConceptItemRepository.save(existingConcept)
+                    
+                    val fineAmount = existingConcept.amount
+                    bill.totalAmount = bill.totalAmount.subtract(fineAmount)
+                    bill.remainingBalance = bill.remainingBalance.subtract(fineAmount)
+                    waterBillRepository.save(bill)
+                    
+                    partner.currentDebt = partner.currentDebt.subtract(fineAmount)
+                    partnerRepository.save(partner)
+                }
+            }
+        }
+    }
+
+    private fun formatDateLiteral(date: LocalDate): String {
+        val day = String.format("%02d", date.dayOfMonth)
+        val monthName = getMonthName(date.monthValue).replaceFirstChar { it.uppercase() }
+        val year = date.year
+        return "$day/$monthName/$year"
+    }
+
+    private fun getMonthName(month: Int): String {
+        return when (month) {
+            1 -> "enero"
+            2 -> "febrero"
+            3 -> "marzo"
+            4 -> "abril"
+            5 -> "mayo"
+            6 -> "junio"
+            7 -> "julio"
+            8 -> "agosto"
+            9 -> "septiembre"
+            10 -> "octubre"
+            11 -> "noviembre"
+            12 -> "diciembre"
+            else -> ""
         }
     }
 }

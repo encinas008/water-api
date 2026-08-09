@@ -221,7 +221,8 @@ data class DebtReportDto(
     val overdueBillsCount: Int,
     val connectionStatus: String,
     val lastPaymentDate: LocalDate?,
-    val contactPhone: String?
+    val contactPhone: String?,
+    val pendingMonths: String? = null
 )
 
 data class ConsumptionReportDto(

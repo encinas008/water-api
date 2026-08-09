@@ -14,7 +14,7 @@ class WaterReportController(
 ) {
 
     @GetMapping("/debtors")
-    fun getDetailedDebtorsReport(): DetailedDebtorsReportDto {
-        return waterReportService.getDetailedDebtorsReport()
+    fun getDetailedDebtorsReport(@RequestParam(required = false) search: String?): DetailedDebtorsReportDto {
+        return waterReportService.getDetailedDebtorsReport(search)
     }
 }

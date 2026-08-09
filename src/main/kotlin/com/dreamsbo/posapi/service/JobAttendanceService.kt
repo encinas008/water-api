@@ -21,6 +21,8 @@ class JobAttendanceService(
     private val jobAttendanceRepository: JobAttendanceRepository,
     private val jobRepository: JobRepository,
     private val partnerRepository: PartnerRepository,
+    private val waterBillRepository: com.dreamsbo.posapi.persistence.repository.WaterBillRepository,
+    private val billConceptItemRepository: com.dreamsbo.posapi.persistence.repository.BillConceptItemRepository
 ) {
 
     fun getAttendanceByJob(jobId: UUID): List<JobAttendanceOutputDto> {
@@ -65,7 +67,7 @@ class JobAttendanceService(
         }
 
         val job = jobEntity.get()
-        if (job.locked || job.startDate.plusDays(2).isBefore(LocalDate.now())) {
+        if (job.locked) {
             throw BadRequestException("No se pueden registrar asistencias para este trabajo porque está bloqueado.")
         }
 
@@ -74,28 +76,38 @@ class JobAttendanceService(
             throw NotFoundEntityException("No se ha encontrado el socio. PartnerId = ${input.partnerId}")
         }
 
-        // Verificar si ya existe una asistencia para esta fecha
-        val existingAttendance = jobAttendanceRepository.findByJobIdAndPartnerIdAndAttendanceDateAndActive(
+        // Verificar si ya existe una asistencia para esta fecha (incluyendo inactivas)
+        val existingAttendance = jobAttendanceRepository.findByJobIdAndPartnerIdAndAttendanceDate(
             input.jobId,
             input.partnerId,
-            input.attendanceDate,
-            true
+            input.attendanceDate
         )
 
-        if (existingAttendance.isPresent) {
-            throw BadRequestException("Ya existe un registro de asistencia para este socio en esta fecha")
+        val attendance = if (existingAttendance.isPresent) {
+            val existing = existingAttendance.get()
+            if (existing.active) {
+                throw BadRequestException("Ya existe un registro de asistencia para este socio en esta fecha")
+            }
+            // Si estaba inactivo, reactivarlo y actualizar datos
+            existing.active = true
+            existing.present = input.present
+            existing.checkInTime = input.checkInTime
+            existing.checkOutTime = input.checkOutTime
+            existing.updatedAt = OffsetDateTime.now()
+            existing
+        } else {
+            JobAttendanceEntity(
+                job = job,
+                partner = partnerEntity.get(),
+                attendanceDate = input.attendanceDate,
+                present = input.present,
+                checkInTime = input.checkInTime,
+                checkOutTime = input.checkOutTime
+            )
         }
 
-        val attendance = JobAttendanceEntity(
-            job = jobEntity.get(),
-            partner = partnerEntity.get(),
-            attendanceDate = input.attendanceDate,
-            present = input.present,
-            checkInTime = input.checkInTime,
-            checkOutTime = input.checkOutTime
-        )
-
         val savedAttendance = jobAttendanceRepository.save(attendance)
+        syncJobFineWithBill(savedAttendance)
         return toJobAttendanceOutputDto(savedAttendance)
     }
 
@@ -107,7 +119,7 @@ class JobAttendanceService(
         }
 
         val job = jobEntity.get()
-        if (job.locked || job.startDate.plusDays(2).isBefore(LocalDate.now())) {
+        if (job.locked) {
             throw BadRequestException("No se pueden registrar asistencias para este trabajo porque está bloqueado.")
         }
 
@@ -119,36 +131,37 @@ class JobAttendanceService(
                 continue // Saltar si el socio no existe
             }
 
-            // Verificar si ya existe
-            val existingAttendance = jobAttendanceRepository.findByJobIdAndPartnerIdAndAttendanceDateAndActive(
+            // Verificar si ya existe (incluyendo inactivos)
+            val existingAttendance = jobAttendanceRepository.findByJobIdAndPartnerIdAndAttendanceDate(
                 input.jobId,
                 partnerAttendance.partnerId,
-                input.attendanceDate,
-                true
+                input.attendanceDate
             )
 
-            if (existingAttendance.isPresent) {
-                // Actualizar existente
+            val savedAttendance = if (existingAttendance.isPresent) {
+                // Actualizar existente o reactivar
                 val attendance = existingAttendance.get()
+                attendance.active = true
                 attendance.present = partnerAttendance.present
                 attendance.checkInTime = partnerAttendance.checkInTime
                 attendance.checkOutTime = partnerAttendance.checkOutTime
                 attendance.updatedAt = OffsetDateTime.now()
-                val updated = jobAttendanceRepository.save(attendance)
-                createdAttendances.add(toJobAttendanceOutputDto(updated))
+                jobAttendanceRepository.save(attendance)
             } else {
                 // Crear nuevo
                 val attendance = JobAttendanceEntity(
-                    job = jobEntity.get(),
+                    job = job,
                     partner = partnerEntity.get(),
                     attendanceDate = input.attendanceDate,
                     present = partnerAttendance.present,
                     checkInTime = partnerAttendance.checkInTime,
                     checkOutTime = partnerAttendance.checkOutTime
                 )
-                val saved = jobAttendanceRepository.save(attendance)
-                createdAttendances.add(toJobAttendanceOutputDto(saved))
+                jobAttendanceRepository.save(attendance)
             }
+            
+            syncJobFineWithBill(savedAttendance)
+            createdAttendances.add(toJobAttendanceOutputDto(savedAttendance))
         }
 
         return createdAttendances
@@ -163,7 +176,7 @@ class JobAttendanceService(
 
         val attendance = attendanceEntity.get()
         
-        if (attendance.job.locked || attendance.job.startDate.plusDays(2).isBefore(LocalDate.now())) {
+        if (attendance.job.locked) {
             throw BadRequestException("No se puede editar esta asistencia porque el trabajo está bloqueado.")
         }
 
@@ -173,6 +186,7 @@ class JobAttendanceService(
         attendance.updatedAt = OffsetDateTime.now()
 
         val updatedAttendance = jobAttendanceRepository.save(attendance)
+        syncJobFineWithBill(updatedAttendance)
         return toJobAttendanceOutputDto(updatedAttendance)
     }
 
@@ -185,13 +199,14 @@ class JobAttendanceService(
 
         val attendance = attendanceEntity.get()
         
-        if (attendance.job.locked || attendance.job.startDate.plusDays(2).isBefore(LocalDate.now())) {
+        if (attendance.job.locked) {
             throw BadRequestException("No se puede eliminar esta asistencia porque el trabajo está bloqueado.")
         }
 
         attendance.active = false
         attendance.updatedAt = OffsetDateTime.now()
-        jobAttendanceRepository.save(attendance)
+        val saved = jobAttendanceRepository.save(attendance)
+        syncJobFineWithBill(saved)
     }
 
     // Métodos para reemplazar funcionalidad de JobPartnerService
@@ -251,7 +266,7 @@ class JobAttendanceService(
 
         val job = jobEntity.get()
         
-        if (job.locked || job.startDate.plusDays(2).isBefore(LocalDate.now())) {
+        if (job.locked) {
             throw BadRequestException("No se pueden asignar socios a este trabajo porque está bloqueado.")
         }
 
@@ -266,6 +281,7 @@ class JobAttendanceService(
                 attendance.active = false
                 attendance.updatedAt = OffsetDateTime.now()
                 jobAttendanceRepository.save(attendance)
+                syncJobFineWithBill(attendance) // remove fine if disabled
             }
         }
 
@@ -281,11 +297,10 @@ class JobAttendanceService(
             val partner = partnerEntity.get()
             
             // Verificar si ya existe un registro de asistencia para este socio en esta fecha
-            val existingAttendance = jobAttendanceRepository.findByJobIdAndPartnerIdAndAttendanceDateAndActive(
+            val existingAttendance = jobAttendanceRepository.findByJobIdAndPartnerIdAndAttendanceDate(
                 jobId,
                 partnerId,
-                jobStartDate,
-                true
+                jobStartDate
             )
             
             if (existingAttendance.isPresent) {
@@ -293,9 +308,11 @@ class JobAttendanceService(
                 val attendance = existingAttendance.get()
                 if (!attendance.active) {
                     attendance.active = true
+                    attendance.present = false // Por defecto ausente al asignar
                     attendance.updatedAt = OffsetDateTime.now()
                     jobAttendanceRepository.save(attendance)
                 }
+                syncJobFineWithBill(attendance)
                 newAttendances.add(attendance)
             } else {
                 // Crear nuevo registro de asistencia (por defecto ausente)
@@ -306,6 +323,7 @@ class JobAttendanceService(
                     present = false // Por defecto ausente, se puede cambiar después
                 )
                 val saved = jobAttendanceRepository.save(newAttendance)
+                syncJobFineWithBill(saved)
                 newAttendances.add(saved)
             }
         }
@@ -322,7 +340,8 @@ class JobAttendanceService(
         attendances.forEach { attendance ->
             attendance.active = false
             attendance.updatedAt = OffsetDateTime.now()
-            jobAttendanceRepository.save(attendance)
+            val saved = jobAttendanceRepository.save(attendance)
+            syncJobFineWithBill(saved)
         }
     }
 
@@ -343,6 +362,92 @@ class JobAttendanceService(
             createdAt = entity.createdAt,
             updatedAt = entity.updatedAt
         )
+    }
+
+    private fun syncJobFineWithBill(attendance: JobAttendanceEntity) {
+        val partner = attendance.partner
+        val job = attendance.job
+        val isAbsent = !attendance.present && attendance.active
+
+        // Buscar factura PENDING o PARTIAL_PAID del mismo mes
+        val periodStart = attendance.attendanceDate.withDayOfMonth(1)
+        val bills = waterBillRepository.findByPartnerIdAndActive(partner.id, true, Sort.unsorted())
+        val bill = bills.firstOrNull { 
+            it.billingPeriodStart == periodStart && 
+            it.status.code == "PENDING" 
+        }
+
+        if (bill != null) {
+            val fineDate = formatDateLiteral(attendance.attendanceDate)
+            val conceptName = "Multa Trabajo: ${job.name} ($fineDate)"
+            
+            val existingConcepts = billConceptItemRepository.findByWaterBillIdAndActive(bill.id, true)
+            val existingConcept = existingConcepts.firstOrNull { it.conceptName == conceptName }
+
+            if (isAbsent) {
+                // Asegurar que la multa exista
+                if (existingConcept == null) {
+                    val fineAmount = job.fine ?: java.math.BigDecimal.ZERO
+                    if (fineAmount > java.math.BigDecimal.ZERO) {
+                        val newConcept = com.dreamsbo.posapi.persistence.entity.BillConceptItemEntity(
+                            waterBill = bill,
+                            conceptName = conceptName,
+                            assignedDate = attendance.attendanceDate,
+                            amount = fineAmount
+                        )
+                        billConceptItemRepository.save(newConcept)
+                        
+                        // Actualizar totales de la factura
+                        bill.totalAmount = bill.totalAmount.add(fineAmount)
+                        bill.remainingBalance = bill.remainingBalance.add(fineAmount)
+                        waterBillRepository.save(bill)
+                        
+                        // Actualizar deuda del socio
+                        partner.currentDebt = partner.currentDebt.add(fineAmount)
+                        partnerRepository.save(partner)
+                    }
+                }
+            } else {
+                // Si ya no está ausente (o fue desasignado), quitar la multa
+                if (existingConcept != null) {
+                    existingConcept.active = false
+                    billConceptItemRepository.save(existingConcept)
+                    
+                    val fineAmount = existingConcept.amount
+                    bill.totalAmount = bill.totalAmount.subtract(fineAmount)
+                    bill.remainingBalance = bill.remainingBalance.subtract(fineAmount)
+                    waterBillRepository.save(bill)
+                    
+                    partner.currentDebt = partner.currentDebt.subtract(fineAmount)
+                    partnerRepository.save(partner)
+                }
+            }
+        }
+    }
+
+    private fun formatDateLiteral(date: LocalDate): String {
+        val day = String.format("%02d", date.dayOfMonth)
+        val monthName = getMonthName(date.monthValue).replaceFirstChar { it.uppercase() }
+        val year = date.year
+        return "$day/$monthName/$year"
+    }
+
+    private fun getMonthName(month: Int): String {
+        return when (month) {
+            1 -> "enero"
+            2 -> "febrero"
+            3 -> "marzo"
+            4 -> "abril"
+            5 -> "mayo"
+            6 -> "junio"
+            7 -> "julio"
+            8 -> "agosto"
+            9 -> "septiembre"
+            10 -> "octubre"
+            11 -> "noviembre"
+            12 -> "diciembre"
+            else -> ""
+        }
     }
 }
 

@@ -99,6 +99,13 @@ class ReportController(val reportService: ReportService) {
         return reportService.getCutoffCandidatesReport()
     }
 
+    @GetMapping("/mora-candidates")
+    fun getMoraCandidatesReport(
+        @RequestParam(required = false, defaultValue = "6") months: Int
+    ): List<DebtReportDto> {
+        return reportService.getMoraCandidatesReport(months)
+    }
+
     @PostMapping("/kitchen")
     fun getTicketKitchenReport(@RequestBody ticketKitchenInputDto: TicketKitchenInputDto): ResponseEntity<ByteArray> {
 

@@ -24,7 +24,7 @@ class DebtManagementService(
     fun calculateTotalDebt(partnerId: UUID): BigDecimal {
         // 1. Sum remaining balance of all unpaid bills (PENDING, OVERDUE, PARTIAL_PAID)
         val unpaidBills = waterBillRepository.findByPartnerIdAndStatusCodesInAndActive(
-            partnerId, listOf("PENDING", "OVERDUE", "PARTIAL_PAID"), true
+            partnerId, listOf("PENDING"), true
         )
         val billsDebt = unpaidBills.sumOf { it.remainingBalance }
 
@@ -72,7 +72,7 @@ class DebtManagementService(
             .map { partner ->
                 val currentDebt = calculateTotalDebt(partner.id)
                 val bills = waterBillRepository.findByPartnerIdAndActive(partner.id, true, Sort.unsorted())
-                val pendingBills = bills.filter { it.status.code in listOf("PENDING", "PARTIAL_PAID") }
+                val pendingBills = bills.filter { it.status.code == "PENDING" }
                 val overdueBills = bills.filter { 
                     it.status.code == "OVERDUE" || (it.dueDate.isBefore(LocalDate.now()) && it.status.code != "PAID") 
                 }
@@ -122,7 +122,7 @@ class DebtManagementService(
         
         return candidates.map { partner ->
             val bills = waterBillRepository.findByPartnerIdAndActive(partner.id, true, Sort.unsorted())
-            val pendingBills = bills.filter { it.status.code in listOf("PENDING", "PARTIAL_PAID", "OVERDUE") }
+            val pendingBills = bills.filter { it.status.code == "PENDING" }
             val overdueBills = bills.filter { 
                 it.status.code == "OVERDUE" || (it.dueDate.isBefore(LocalDate.now()) && it.status.code != "PAID") 
             }
@@ -159,6 +159,53 @@ class DebtManagementService(
          .sortedByDescending { it.totalDebt }
     }
 
+    fun getMoraCandidatesList(months: Int = 6): List<DebtReportDto> {
+        val startDate = LocalDate.now().minusMonths(months.toLong())
+        val candidateIds = waterBillRepository.findPartnerIdsWithPendingConceptInPeriod("mora", startDate)
+        
+        if (candidateIds.isEmpty()) {
+            return emptyList()
+        }
+
+        val candidates = partnerRepository.findAllById(candidateIds)
+        
+        return candidates.mapNotNull { partner ->
+            val bills = waterBillRepository.findByPartnerIdAndActive(partner.id, true, Sort.unsorted())
+            val pendingBills = bills.filter { it.status.code == "PENDING" }
+            val overdueBills = bills.filter { 
+                it.status.code == "OVERDUE" || (it.dueDate.isBefore(LocalDate.now()) && it.status.code != "PAID") 
+            }
+
+
+            val currentDebt = calculateTotalDebt(partner.id)
+            
+            val payments = waterPaymentRepository.findByPartnerIdAndActive(
+                partner.id, 
+                true, 
+                Sort.by(Sort.Direction.DESC, "paymentDate")
+            )
+            val lastPaymentDate = payments.firstOrNull()?.paymentDate
+
+            val pendingMonthsStr = pendingBills
+                .sortedBy { it.billingPeriodStart }
+                .joinToString(", ") { "${it.billingPeriodStart.monthValue}/${it.billingPeriodStart.year}" }
+
+            DebtReportDto(
+                partnerId = partner.id,
+                partnerNumber = partner.partnerNumber,
+                partnerName = partner.fullName,
+                partnerIdentificationNumber = partner.partnerIdentificationNumber,
+                totalDebt = currentDebt,
+                pendingBillsCount = pendingBills.size,
+                overdueBillsCount = overdueBills.size,
+                connectionStatus = partner.connectionStatus?.name ?: "N/A",
+                lastPaymentDate = lastPaymentDate,
+                contactPhone = partner.cellphone,
+                pendingMonths = pendingMonthsStr
+            )
+        }.sortedByDescending { it.totalDebt }
+    }
+
     @Transactional
     fun updatePartnerDebt(partnerId: UUID) {
         val partner = partnerRepository.findById(partnerId).orElse(null) ?: return
@@ -187,7 +234,7 @@ class DebtManagementService(
 
         val currentRealDebt = calculateTotalDebt(partnerId)
         val bills = waterBillRepository.findByPartnerIdAndActive(partnerId, true, Sort.unsorted())
-        val pendingBills = bills.filter { it.status.code in listOf("PENDING", "PARTIAL_PAID", "OVERDUE") }
+        val pendingBills = bills.filter { it.status.code == "PENDING" }
         val paidBills = bills.filter { it.status.code == "PAID" }
 
         val totalBilled = bills.sumOf { it.totalAmount }

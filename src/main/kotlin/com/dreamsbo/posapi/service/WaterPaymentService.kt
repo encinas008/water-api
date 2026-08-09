@@ -47,7 +47,7 @@ class WaterPaymentService(
         bill?.let { b ->
             val pendingBills = waterBillRepository.findByPartnerIdAndStatusCodesInAndActive(
                 input.partnerId,
-                listOf("PENDING", "PARTIAL_PAID", "OVERDUE"),
+                listOf("PENDING"),
                 true
             )
 
@@ -87,19 +87,25 @@ class WaterPaymentService(
             val billedConcepts = billConceptItemRepository.findByWaterBillIdAndActive(bill.id, true)
             
             val filteredJobs = allPendingFines.jobAbsences.filter { fine ->
-                billedConcepts.none { concept -> 
-                    concept.conceptName.contains(fine.name, ignoreCase = true) && 
-                    (concept.conceptName.contains("Multa", ignoreCase = true) || 
-                     concept.conceptName.contains("AULL", ignoreCase = true))
+                val formattedDateLower = formatDateLiteral(fine.date).lowercase()
+                val isAlreadyBilled = billedConcepts.any { concept ->
+                    val conceptNameLower = concept.conceptName.lowercase()
+                    conceptNameLower.contains(formattedDateLower) &&
+                    (conceptNameLower.contains("multa") || conceptNameLower.contains("aull")) &&
+                    concept.amount.compareTo(fine.fine) == 0
                 }
+                !isAlreadyBilled
             }
             
             val filteredMeetings = allPendingFines.meetingAbsences.filter { fine ->
-                billedConcepts.none { concept -> 
-                    concept.conceptName.contains(fine.name, ignoreCase = true) && 
-                    (concept.conceptName.contains("Multa", ignoreCase = true) || 
-                     concept.conceptName.contains("AULL", ignoreCase = true))
+                val formattedDateLower = formatDateLiteral(fine.date).lowercase()
+                val isAlreadyBilled = billedConcepts.any { concept ->
+                    val conceptNameLower = concept.conceptName.lowercase()
+                    conceptNameLower.contains(formattedDateLower) &&
+                    (conceptNameLower.contains("multa") || conceptNameLower.contains("aull")) &&
+                    concept.amount.compareTo(fine.fine) == 0
                 }
+                !isAlreadyBilled
             }
 
             pendingFinesAmount = filteredJobs.sumOf { it.fine } + filteredMeetings.sumOf { it.fine }
@@ -403,6 +409,13 @@ class WaterPaymentService(
             12 -> "diciembre"
             else -> ""
         }
+    }
+
+    private fun formatDateLiteral(date: LocalDate): String {
+        val day = String.format("%02d", date.dayOfMonth)
+        val monthName = getMonthName(date.monthValue).replaceFirstChar { it.uppercase() }
+        val year = date.year
+        return "$day/$monthName/$year"
     }
 
     private fun numberToWords(amount: BigDecimal): String {
