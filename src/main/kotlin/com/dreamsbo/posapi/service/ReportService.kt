@@ -140,7 +140,7 @@ class ReportService(
         
         val billsGenerated = bills.size
         val billsPaid = bills.count { it.status.code == "PAID" }
-        val billsPending = bills.count { it.status.code in listOf("PENDING", "PARTIAL_PAID") }
+        val billsPending = bills.count { it.status.code == "PENDING" }
         val billsOverdue = bills.count { 
             it.dueDate.isBefore(LocalDate.now()) && it.status.code != "PAID" 
         }
@@ -174,6 +174,10 @@ class ReportService(
 
     fun getCutoffCandidatesReport(): List<DebtReportDto> {
         return debtManagementService.getCutoffCandidatesList()
+    }
+
+    fun getMoraCandidatesReport(months: Int = 3): List<DebtReportDto> {
+        return debtManagementService.getMoraCandidatesList(months)
     }
 
     fun getPendingReadingsReport(): List<PendingReadingsReportDto> {
@@ -299,6 +303,12 @@ class ReportService(
 
         if (userId != null) {
             cashFlows = cashFlows.filter { it.cashBalance.box.user.id == userId }
+        }
+
+        // Filter out cancellation refunds so they don't appear in the summary
+        cashFlows = cashFlows.filter { 
+            !it.description.contains("Devolución por anulación", ignoreCase = true) &&
+            !it.description.contains("anulación factura", ignoreCase = true)
         }
 
         cashFlows.forEach { cf ->
@@ -995,6 +1005,34 @@ class ReportService(
                 total = payment.amount,
                 responsable = payment.user.username
             )
+        }.toMutableList()
+
+        val startDT = startDate.atStartOfDay().atOffset(ZoneOffset.ofHours(-4))
+        val endDT = endDate.plusDays(1).atStartOfDay().atOffset(ZoneOffset.ofHours(-4))
+        var cashFlows = cashFlowRepository.findByCreatedAtBetweenAndActive(startDT, endDT, true, Sort.by("createdAt"))
+        
+        cashFlows = cashFlows.filter { it.cashBalance != null && it.cashFlowType.name.equals("INGRESO", ignoreCase = true) }
+
+        var nextIndex = (items.maxOfOrNull { it.nro } ?: 0) + 1
+        
+        cashFlows.forEach { cf ->
+            val amount = cf.amount
+            totalGlobalIncome = totalGlobalIncome.add(amount)
+            
+            items.add(
+                IncomeReportItemDto(
+                    nro = cf.correlativeNumber ?: nextIndex++,
+                    fecha = cf.createdAt.toLocalDate(),
+                    nombreSocio = cf.description.ifBlank { "INGRESO MANUAL" },
+                    numeroSocio = 0L,
+                    tarifaBasica = BigDecimal.ZERO,
+                    aporteOtb = BigDecimal.ZERO,
+                    aporteDeporte = BigDecimal.ZERO,
+                    otros = amount,
+                    total = amount,
+                    responsable = cf.cashBalance?.box?.user?.username ?: "SISTEMA"
+                )
+            )
         }
 
         return IncomeReportDto(
@@ -1008,8 +1046,12 @@ class ReportService(
         val endDT = endDate.plusDays(1).atStartOfDay().atOffset(ZoneOffset.ofHours(-4))
         var cashFlows = cashFlowRepository.findByCreatedAtBetweenAndActive(startDT, endDT, true, Sort.by("createdAt"))
         
-        // Filter by type "EGRESO"
-        cashFlows = cashFlows.filter { it.cashFlowType.name.equals("EGRESO", ignoreCase = true) }
+        // Filter by type "EGRESO" and exclude the ones related to bill cancellations
+        cashFlows = cashFlows.filter { 
+            it.cashFlowType.name.equals("EGRESO", ignoreCase = true) && 
+            !it.description.contains("Devolución por anulación", ignoreCase = true) &&
+            !it.description.contains("anulación factura", ignoreCase = true)
+        }
 
         var totalGlobalExpense = BigDecimal.ZERO
         val items = cashFlows.mapIndexed { index, flow ->

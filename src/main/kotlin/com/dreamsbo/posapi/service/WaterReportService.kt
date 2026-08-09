@@ -20,14 +20,33 @@ class WaterReportService(
     private val debtManagementService: DebtManagementService
 ) {
 
-    fun getDetailedDebtorsReport(): DetailedDebtorsReportDto {
+    fun getDetailedDebtorsReport(search: String? = null): DetailedDebtorsReportDto {
         // 1. Fetch EVERYTHING in bulk for performance
-        val allActivePartners = partnerRepository.findAllByActive(true, Sort.by(Sort.Direction.ASC, "partnerNumber"))
+        var allActivePartners = partnerRepository.findAllByActive(true, Sort.by(Sort.Direction.ASC, "partnerNumber"))
+        
+        if (!search.isNullOrBlank()) {
+            val s = search.lowercase()
+            allActivePartners = allActivePartners.filter { 
+                it.fullName.lowercase().contains(s) || it.partnerNumber?.toString() == s 
+            }.toMutableList()
+        }
+
+        if (allActivePartners.isEmpty()) {
+            return DetailedDebtorsReportDto(
+                items = emptyList(),
+                totalDebt = BigDecimal.ZERO,
+                totalElements = 0,
+                totalPages = 1,
+                currentPage = 0,
+                generatedAt = OffsetDateTime.now()
+            )
+        }
+
         val activePartnerIds = allActivePartners.map { it.id }.toSet()
 
         // Fetch all unpaid bills for all active partners in one shot
         val allUnpaidBills = waterBillRepository.findByStatusCodesAndActive(
-            listOf("PENDING", "PARTIAL_PAID", "OVERDUE"), true
+            listOf("PENDING"), true
         ).filter { it.partner.id in activePartnerIds }
         val billsByPartner = allUnpaidBills.groupBy { it.partner.id }
 

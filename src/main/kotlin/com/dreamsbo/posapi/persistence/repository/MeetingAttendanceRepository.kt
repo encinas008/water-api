@@ -10,6 +10,7 @@ import java.util.*
 
 @Repository
 interface MeetingAttendanceRepository : JpaRepository<MeetingAttendanceEntity, UUID> {
+    fun findByMeetingId(meetingId: UUID): List<MeetingAttendanceEntity>
     fun findByMeetingIdAndActive(meetingId: UUID, active: Boolean): MutableList<MeetingAttendanceEntity>
     fun findByPartnerIdAndActive(partnerId: UUID, active: Boolean): MutableList<MeetingAttendanceEntity>
     fun findByMeetingIdAndAttendanceDateAndActive(meetingId: UUID, date: LocalDate, active: Boolean): MutableList<MeetingAttendanceEntity>
@@ -19,6 +20,8 @@ interface MeetingAttendanceRepository : JpaRepository<MeetingAttendanceEntity, U
 
     @Query("SELECT ma FROM MeetingAttendanceEntity ma WHERE ma.meeting.id = :meetingId AND ma.partner.id = :partnerId AND ma.attendanceDate = :date AND ma.active = :active")
     fun findByMeetingIdAndPartnerIdAndDate(meetingId: UUID, partnerId: UUID, date: LocalDate, active: Boolean): Optional<MeetingAttendanceEntity>
+    
+    fun findByMeetingIdAndPartnerIdAndAttendanceDate(meetingId: UUID, partnerId: UUID, date: LocalDate): Optional<MeetingAttendanceEntity>
     
     @Query("SELECT ma FROM MeetingAttendanceEntity ma WHERE ma.partner.id = :partnerId AND ma.attendanceDate BETWEEN :startDate AND :endDate AND ma.active = :active AND ma.meeting.active = :active AND ma.present = false")
     fun findAbsencesByPartnerAndDateRange(

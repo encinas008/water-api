@@ -261,8 +261,7 @@ class PartnerService(
         val partner = partnerEntity.get()
         val currentDebt = debtManagementService.calculateTotalDebt(partner.id)
         val bills = waterBillRepository.findByPartnerIdAndActive(id, true, Sort.unsorted())
-
-        val pendingBills = bills.filter { it.status.code in listOf("PENDING", "PARTIAL_PAID", "OVERDUE") }
+        val pendingBills = bills.filter { it.status.code == "PENDING" }
         val overdueBills =
             bills.filter { it.status.code == "OVERDUE" || (it.dueDate.isBefore(LocalDate.now()) && it.status.code != "PAID") }
         val totalPendingAmount = pendingBills.sumOf { it.remainingBalance }
