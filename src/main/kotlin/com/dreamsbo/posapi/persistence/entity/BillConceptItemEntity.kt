@@ -31,6 +31,12 @@ data class BillConceptItemEntity(
     @Column(name = "amount")
     var amount: BigDecimal,  // Importe del concepto
 
+    @Column(name = "fine_type", length = 20)
+    var fineType: String? = null, // "JOB", "MEETING" o null si es un concepto regular
+
+    @Column(name = "fine_id")
+    var fineId: UUID? = null, // ID de la asistencia
+
     var createdAt: OffsetDateTime = OffsetDateTime.now(),
     var updatedAt: OffsetDateTime? = null,
     var active: Boolean = true,

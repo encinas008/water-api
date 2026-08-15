@@ -382,7 +382,8 @@ class JobAttendanceService(
             val conceptName = "Multa Trabajo: ${job.name} ($fineDate)"
             
             val existingConcepts = billConceptItemRepository.findByWaterBillIdAndActive(bill.id, true)
-            val existingConcept = existingConcepts.firstOrNull { it.conceptName == conceptName }
+            // Usar fineId para buscar el concepto exacto asociado a esta asistencia
+            val existingConcept = existingConcepts.firstOrNull { it.fineId == attendance.id }
 
             if (isAbsent) {
                 // Asegurar que la multa exista
@@ -393,7 +394,9 @@ class JobAttendanceService(
                             waterBill = bill,
                             conceptName = conceptName,
                             assignedDate = attendance.attendanceDate,
-                            amount = fineAmount
+                            amount = fineAmount,
+                            fineType = "JOB",
+                            fineId = attendance.id
                         )
                         billConceptItemRepository.save(newConcept)
                         
@@ -410,15 +413,20 @@ class JobAttendanceService(
             } else {
                 // Si ya no está ausente (o fue desasignado), quitar la multa
                 if (existingConcept != null) {
-                    existingConcept.active = false
-                    billConceptItemRepository.save(existingConcept)
+                    billConceptItemRepository.delete(existingConcept) // Eliminado físicamente
                     
                     val fineAmount = existingConcept.amount
                     bill.totalAmount = bill.totalAmount.subtract(fineAmount)
+                    if (bill.totalAmount < java.math.BigDecimal.ZERO) bill.totalAmount = java.math.BigDecimal.ZERO
+                    
                     bill.remainingBalance = bill.remainingBalance.subtract(fineAmount)
+                    if (bill.remainingBalance < java.math.BigDecimal.ZERO) bill.remainingBalance = java.math.BigDecimal.ZERO
+                    
                     waterBillRepository.save(bill)
                     
                     partner.currentDebt = partner.currentDebt.subtract(fineAmount)
+                    if (partner.currentDebt < java.math.BigDecimal.ZERO) partner.currentDebt = java.math.BigDecimal.ZERO
+                    
                     partnerRepository.save(partner)
                 }
             }

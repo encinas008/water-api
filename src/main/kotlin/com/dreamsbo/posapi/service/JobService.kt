@@ -20,7 +20,8 @@ import java.util.*
 @Service
 class JobService(
     private val jobRepository: JobRepository,
-    private val jobAttendanceRepository: JobAttendanceRepository
+    private val jobAttendanceRepository: JobAttendanceRepository,
+    private val waterBillingService: WaterBillingService
 ) {
 
     fun findAll(): List<JobOutputDto> {
@@ -125,11 +126,19 @@ class JobService(
 
         val job = jobEntity.get()
         
-        // BORRAR REFERENCIAS (Físico)
+        // ELIMINAR MULTAS DE FACTURAS PENDIENTES
         val activeAttendances = jobAttendanceRepository.findByJobIdAndActive(job.id, true)
-        jobAttendanceRepository.deleteAll(activeAttendances)
+        activeAttendances.forEach { attendance ->
+            waterBillingService.removeFineFromPendingBills(attendance.id)
+        }
         
         val inactiveAttendances = jobAttendanceRepository.findByJobIdAndActive(job.id, false)
+        inactiveAttendances.forEach { attendance ->
+            waterBillingService.removeFineFromPendingBills(attendance.id)
+        }
+
+        // BORRAR REFERENCIAS (Físico)
+        jobAttendanceRepository.deleteAll(activeAttendances)
         jobAttendanceRepository.deleteAll(inactiveAttendances)
 
         // ELIMINAR TRABAJO (Físico)
