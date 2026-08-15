@@ -387,9 +387,8 @@ class MeetingAttendanceService(
             val conceptName = "Multa Reunión: ${meeting.name}$typeExtra ($fineDate)"
             
             val existingConcepts = billConceptItemRepository.findByWaterBillIdAndActive(bill.id, true)
-            // Tenemos que buscar si hay un concepto existente de esta reunión para este socio
-            val conceptPrefix = "Multa Reunión: ${meeting.name}"
-            val existingConcept = existingConcepts.firstOrNull { it.conceptName.startsWith(conceptPrefix) && it.conceptName.contains(fineDate) }
+            // Usar fineId para buscar el concepto exacto asociado a esta asistencia
+            val existingConcept = existingConcepts.firstOrNull { it.fineId == attendance.id }
 
             val shouldHaveFine = isAbsent || hasLateFine
             val expectedAmount = if (isAbsent) meeting.fine else if (hasLateFine) attendance.lateFine else java.math.BigDecimal.ZERO
@@ -401,7 +400,9 @@ class MeetingAttendanceService(
                         waterBill = bill,
                         conceptName = conceptName,
                         assignedDate = attendance.attendanceDate,
-                        amount = expectedAmount
+                        amount = expectedAmount,
+                        fineType = "MEETING",
+                        fineId = attendance.id
                     )
                     billConceptItemRepository.save(newConcept)
                     
@@ -430,15 +431,20 @@ class MeetingAttendanceService(
             } else {
                 // No debería tener multa (estuvo presente a tiempo, o desasignado)
                 if (existingConcept != null) {
-                    existingConcept.active = false
-                    billConceptItemRepository.save(existingConcept)
+                    billConceptItemRepository.delete(existingConcept) // Eliminado físicamente
                     
                     val fineAmount = existingConcept.amount
                     bill.totalAmount = bill.totalAmount.subtract(fineAmount)
+                    if (bill.totalAmount < java.math.BigDecimal.ZERO) bill.totalAmount = java.math.BigDecimal.ZERO
+                    
                     bill.remainingBalance = bill.remainingBalance.subtract(fineAmount)
+                    if (bill.remainingBalance < java.math.BigDecimal.ZERO) bill.remainingBalance = java.math.BigDecimal.ZERO
+                    
                     waterBillRepository.save(bill)
                     
                     partner.currentDebt = partner.currentDebt.subtract(fineAmount)
+                    if (partner.currentDebt < java.math.BigDecimal.ZERO) partner.currentDebt = java.math.BigDecimal.ZERO
+                    
                     partnerRepository.save(partner)
                 }
             }

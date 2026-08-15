@@ -25,7 +25,8 @@ class MeetingService(
     private val meetingRepository: MeetingRepository,
     private val meetingTypeRepository: MeetingTypeRepository,
     private val partnerRepository: PartnerRepository,
-    private val meetingAttendanceRepository: MeetingAttendanceRepository
+    private val meetingAttendanceRepository: MeetingAttendanceRepository,
+    private val waterBillingService: WaterBillingService
 ) {
 
     fun findAll(): List<MeetingOutputDto> {
@@ -162,11 +163,19 @@ class MeetingService(
 
         val meeting = meetingEntity.get()
         
-        // BORRAR REFERENCIAS (Físico)
+        // ELIMINAR MULTAS DE FACTURAS PENDIENTES
         val activeAttendances = meetingAttendanceRepository.findByMeetingIdAndActive(meeting.id, true)
-        meetingAttendanceRepository.deleteAll(activeAttendances)
+        activeAttendances.forEach { attendance ->
+            waterBillingService.removeFineFromPendingBills(attendance.id)
+        }
         
         val inactiveAttendances = meetingAttendanceRepository.findByMeetingIdAndActive(meeting.id, false)
+        inactiveAttendances.forEach { attendance ->
+            waterBillingService.removeFineFromPendingBills(attendance.id)
+        }
+
+        // BORRAR REFERENCIAS (Físico)
+        meetingAttendanceRepository.deleteAll(activeAttendances)
         meetingAttendanceRepository.deleteAll(inactiveAttendances)
 
         // ELIMINAR REUNIÓN (Físico)

@@ -664,7 +664,9 @@ class WaterBillingService(
                 waterBill = bill,
                 conceptName = "Multa Trabajo: ${fine.name} ($fineDate)",
                 assignedDate = assignedDate,
-                amount = fine.fine
+                amount = fine.fine,
+                fineType = "JOB",
+                fineId = fine.id
             )
         }
         
@@ -679,7 +681,9 @@ class WaterBillingService(
                 waterBill = bill,
                 conceptName = "$prefix${fine.name} ($fineDate)",
                 assignedDate = assignedDate,
-                amount = fine.fine
+                amount = fine.fine,
+                fineType = fine.type, // "REUNION", "TRABAJO" o "OTRO"
+                fineId = fine.id
             )
         }
         
@@ -691,6 +695,34 @@ class WaterBillingService(
         
         // Retornar total
         return allConcepts.sumOf { it.amount }
+    }
+
+    @Transactional
+    fun removeFineFromPendingBills(fineId: UUID) {
+        val concepts = billConceptItemRepository.findByFineId(fineId)
+        for (concept in concepts) {
+            val bill = concept.waterBill
+            if (bill.status.code == "PENDING" && bill.active) {
+                // Restar el monto de la factura
+                bill.totalAmount = bill.totalAmount.subtract(concept.amount)
+                if (bill.totalAmount < BigDecimal.ZERO) bill.totalAmount = BigDecimal.ZERO
+
+                bill.remainingBalance = bill.remainingBalance.subtract(concept.amount)
+                if (bill.remainingBalance < BigDecimal.ZERO) bill.remainingBalance = BigDecimal.ZERO
+
+                // Actualizar deuda del socio
+                val partner = bill.partner
+                partner.currentDebt = partner.currentDebt.subtract(concept.amount)
+                if (partner.currentDebt < BigDecimal.ZERO) partner.currentDebt = BigDecimal.ZERO
+
+                // Guardar la factura y el socio
+                waterBillRepository.save(bill)
+                partnerRepository.save(partner)
+
+                // Eliminar el concepto
+                billConceptItemRepository.delete(concept)
+            }
+        }
     }
 
     private fun toWaterBillOutputDto(entity: WaterBillEntity): WaterBillOutputDto {
