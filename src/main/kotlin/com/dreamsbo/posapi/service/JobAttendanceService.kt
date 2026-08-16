@@ -385,7 +385,8 @@ class JobAttendanceService(
             // Usar fineId para buscar el concepto exacto asociado a esta asistencia
             val existingConcept = existingConcepts.firstOrNull { it.fineId == attendance.id }
 
-            if (isAbsent) {
+            val isExempt = partner.isElderly && !partner.elderlyPaysJobFines
+            if (isAbsent && !isExempt) {
                 // Asegurar que la multa exista
                 if (existingConcept == null) {
                     val fineAmount = job.fine ?: java.math.BigDecimal.ZERO

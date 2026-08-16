@@ -22,6 +22,10 @@ data class PartnerOutputDto(
     val currentDebt: BigDecimal,
     val lastBillingDate: LocalDate?,
     val isElderly: Boolean,
+    val elderlyPaysMeetingFines: Boolean,
+    val elderlyMeetingFineExplanation: String?,
+    val elderlyPaysJobFines: Boolean,
+    val elderlyJobFineExplanation: String?,
     val notes: String?,
     val active: Boolean,
     val createdAt: OffsetDateTime,
@@ -40,6 +44,10 @@ data class PartnerInputDto(
     val connectionDate: LocalDate? = null,
     val waterConnectionAddress: String? = null,
     val isElderly: Boolean = false,
+    val elderlyPaysMeetingFines: Boolean = true,
+    val elderlyMeetingFineExplanation: String? = null,
+    val elderlyPaysJobFines: Boolean = true,
+    val elderlyJobFineExplanation: String? = null,
     val notes: String = "",
     val installationAmount: BigDecimal = BigDecimal.ZERO,
     val paymentTypeId: UUID? = null,
@@ -60,6 +68,10 @@ data class PartnerUpdateDto(
     val connectionDate: LocalDate?,
     val waterConnectionAddress: String?,
     val isElderly: Boolean?,
+    val elderlyPaysMeetingFines: Boolean?,
+    val elderlyMeetingFineExplanation: String?,
+    val elderlyPaysJobFines: Boolean?,
+    val elderlyJobFineExplanation: String?,
     val notes: String?
 )
 

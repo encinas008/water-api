@@ -390,7 +390,8 @@ class MeetingAttendanceService(
             // Usar fineId para buscar el concepto exacto asociado a esta asistencia
             val existingConcept = existingConcepts.firstOrNull { it.fineId == attendance.id }
 
-            val shouldHaveFine = isAbsent || hasLateFine
+            val isExempt = partner.isElderly && !partner.elderlyPaysMeetingFines
+            val shouldHaveFine = (isAbsent || hasLateFine) && !isExempt
             val expectedAmount = if (isAbsent) meeting.fine else if (hasLateFine) attendance.lateFine else java.math.BigDecimal.ZERO
             
             if (shouldHaveFine && expectedAmount > java.math.BigDecimal.ZERO) {
