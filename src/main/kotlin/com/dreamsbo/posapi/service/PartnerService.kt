@@ -110,6 +110,10 @@ class PartnerService(
             connectionDate = input.connectionDate,
             waterConnectionAddress = input.waterConnectionAddress,
             isElderly = input.isElderly,
+            elderlyPaysMeetingFines = input.elderlyPaysMeetingFines,
+            elderlyMeetingFineExplanation = input.elderlyMeetingFineExplanation,
+            elderlyPaysJobFines = input.elderlyPaysJobFines,
+            elderlyJobFineExplanation = input.elderlyJobFineExplanation,
             notes = input.notes,
             statusChangedAt = OffsetDateTime.now()
         )
@@ -187,6 +191,10 @@ class PartnerService(
         input.connectionDate?.let { partner.connectionDate = it }
         input.waterConnectionAddress?.let { partner.waterConnectionAddress = it }
         input.isElderly?.let { partner.isElderly = it }
+        input.elderlyPaysMeetingFines?.let { partner.elderlyPaysMeetingFines = it }
+        input.elderlyMeetingFineExplanation?.let { partner.elderlyMeetingFineExplanation = it }
+        input.elderlyPaysJobFines?.let { partner.elderlyPaysJobFines = it }
+        input.elderlyJobFineExplanation?.let { partner.elderlyJobFineExplanation = it }
         input.notes?.let { partner.notes = it }
 
         input.connectionStatusCode?.let { code ->
@@ -327,6 +335,10 @@ class PartnerService(
             currentDebt = debtManagementService.calculateTotalDebt(entity.id),
             lastBillingDate = entity.lastBillingDate,
             isElderly = entity.isElderly,
+            elderlyPaysMeetingFines = entity.elderlyPaysMeetingFines,
+            elderlyMeetingFineExplanation = entity.elderlyMeetingFineExplanation,
+            elderlyPaysJobFines = entity.elderlyPaysJobFines,
+            elderlyJobFineExplanation = entity.elderlyJobFineExplanation,
             notes = entity.notes,
             createdAt = entity.createdAt,
             updatedAt = entity.updatedAt,

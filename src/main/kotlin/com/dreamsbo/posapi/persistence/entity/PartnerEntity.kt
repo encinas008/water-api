@@ -54,6 +54,18 @@ data class PartnerEntity(
     @Column(name = "is_elderly")
     var isElderly: Boolean = false,
 
+    @Column(name = "elderly_pays_meeting_fines")
+    var elderlyPaysMeetingFines: Boolean = true,
+
+    @Column(name = "elderly_meeting_fine_explanation")
+    var elderlyMeetingFineExplanation: String? = null,
+
+    @Column(name = "elderly_pays_job_fines")
+    var elderlyPaysJobFines: Boolean = true,
+
+    @Column(name = "elderly_job_fine_explanation")
+    var elderlyJobFineExplanation: String? = null,
+
     var notes: String = "",
 
     @Column(name = "created_at", columnDefinition = "TIMESTAMPTZ", nullable = false, updatable = false)

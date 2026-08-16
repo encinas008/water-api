@@ -36,6 +36,7 @@ class MonthlyPendingFinesService(
         val jobAbsences = jobAttendanceRepository.findAbsencesByPartnerAndDateRange(
             partnerId, startDate, endDate, true
         ).filter { it.id !in paidFineIds }
+        .filter { !it.partner.isElderly || it.partner.elderlyPaysJobFines }
         .map { attendance ->
             val fine = attendance.job.fine ?: BigDecimal.ZERO
             PendingFineDto(
@@ -51,6 +52,7 @@ class MonthlyPendingFinesService(
         val meetingAbsences = meetingAttendanceRepository.findFinesByPartnerAndDateRange(
             partnerId, startDate, endDate, true
         ).filter { it.id !in paidFineIds }
+        .filter { !it.partner.isElderly || it.partner.elderlyPaysMeetingFines }
         .map { attendance ->
             // Si es falta, se usa la multa de la reunión. Si es retraso, se usa lateFine.
             val fine = if (!attendance.present) {
@@ -116,6 +118,7 @@ class MonthlyPendingFinesService(
         
         val jobAbsences = jobAttendanceRepository.findAbsencesByPartner(partnerId, true)
             .filter { it.id !in paidFineIds }
+            .filter { !it.partner.isElderly || it.partner.elderlyPaysJobFines }
             .map { attendance ->
                 PendingFineDto(
                     id = attendance.id,
@@ -128,6 +131,7 @@ class MonthlyPendingFinesService(
             
         val meetingAbsences = meetingAttendanceRepository.findFinesByPartner(partnerId, true)
             .filter { it.id !in paidFineIds }
+            .filter { !it.partner.isElderly || it.partner.elderlyPaysMeetingFines }
             .map { attendance ->
                 val fine = if (!attendance.present) {
                     attendance.meeting.fine
