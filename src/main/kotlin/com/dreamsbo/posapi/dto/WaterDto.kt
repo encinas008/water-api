@@ -211,6 +211,11 @@ data class MonthlyPendingFinesDto(
 )
 
 // Report DTOs
+data class MoraDetailDto(
+    val billPeriod: String,
+    val conceptName: String
+)
+
 data class DebtReportDto(
     val partnerId: UUID,
     val partnerNumber: Long?,
@@ -222,7 +227,8 @@ data class DebtReportDto(
     val connectionStatus: String,
     val lastPaymentDate: LocalDate?,
     val contactPhone: String?,
-    val pendingMonths: String? = null
+    val pendingMonths: String? = null,
+    val moraDetails: List<MoraDetailDto> = emptyList()
 )
 
 data class ConsumptionReportDto(
