@@ -126,6 +126,7 @@ interface WaterBillRepository : JpaRepository<WaterBillEntity, UUID> {
         FROM WaterBillEntity b, BillConceptItemEntity c 
         WHERE c.waterBill.id = b.id 
         AND b.active = true 
+        AND c.active = true
         AND b.status.code = 'PENDING' 
         AND b.billingPeriodStart >= :startDate 
         AND LOWER(c.conceptName) LIKE LOWER(CONCAT('%', :conceptName, '%'))

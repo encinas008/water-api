@@ -1,6 +1,7 @@
 package com.dreamsbo.posapi.service
 
 import com.dreamsbo.posapi.dto.DebtReportDto
+import com.dreamsbo.posapi.dto.MoraDetailDto
 import com.dreamsbo.posapi.persistence.repository.PartnerRepository
 import com.dreamsbo.posapi.persistence.repository.WaterBillRepository
 import com.dreamsbo.posapi.persistence.repository.WaterPaymentRepository
@@ -190,6 +191,24 @@ class DebtManagementService(
                 .sortedBy { it.billingPeriodStart }
                 .joinToString(", ") { "${it.billingPeriodStart.monthValue}/${it.billingPeriodStart.year}" }
 
+            val billIds = pendingBills.map { it.id }
+            val moraDetails = if (billIds.isNotEmpty()) {
+                val conceptItems = billConceptItemRepository.findByWaterBillIdInAndActive(billIds, true)
+                    .filter { it.conceptName.lowercase().contains("mora") }
+                
+                val monthNames = arrayOf("", "ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE")
+                
+                conceptItems.mapNotNull { concept ->
+                    val relatedBill = pendingBills.find { it.id == concept.waterBill.id }
+                    if (relatedBill != null) {
+                        MoraDetailDto(
+                            billPeriod = "${monthNames[relatedBill.billingPeriodStart.monthValue]} ${relatedBill.billingPeriodStart.year}",
+                            conceptName = concept.conceptName
+                        )
+                    } else null
+                }.distinctBy { "${it.billPeriod}-${it.conceptName}" }
+            } else emptyList()
+
             DebtReportDto(
                 partnerId = partner.id,
                 partnerNumber = partner.partnerNumber,
@@ -201,9 +220,10 @@ class DebtManagementService(
                 connectionStatus = partner.connectionStatus?.name ?: "N/A",
                 lastPaymentDate = lastPaymentDate,
                 contactPhone = partner.cellphone,
-                pendingMonths = pendingMonthsStr
+                pendingMonths = pendingMonthsStr,
+                moraDetails = moraDetails
             )
-        }.sortedByDescending { it.totalDebt }
+        }.sortedBy { it.partnerNumber }
     }
 
     @Transactional

@@ -213,42 +213,28 @@ class WaterBillingService(
      * o si debe recibir una multa recurrente por estar en estado cortado (cada 3 meses).
      */
     private fun checkAndApplyAutoCutoff(partner: com.dreamsbo.posapi.persistence.entity.PartnerEntity, bill: WaterBillEntity) {
-        val unpaidBillsCount = waterBillRepository.countUnpaidBillsByPartnerId(partner.id)
+        val unpaidBills = waterBillRepository.findByPartnerIdAndStatusCodesInAndActive(
+            partner.id,
+            listOf("PENDING", "OVERDUE", "PARTIAL_PAID"),
+            true
+        )
+        val unpaidBillsCount = unpaidBills.size
         val currentStatus = partner.connectionStatus?.code ?: "ACTIVE"
         
-        // El monto de la multa es 50 Bs según requerimiento
-        val multaCorteMonto = billingConfigService.getConfigValue("MULTA_CORTE", BigDecimal("50.0"))
         val mesesParaCorte = billingConfigService.getConfigValue("MESES_PARA_CORTE", BigDecimal("3")).toInt()
         
         if (currentStatus == "ACTIVE" && unpaidBillsCount >= mesesParaCorte) {
-            println("🚨 SOCIO CON MORA ($mesesParaCorte MESES). Cambiando estado a CUT_OFF y aplicando multa de $multaCorteMonto Bs")
+            println("🚨 SOCIO CON MORA ($mesesParaCorte MESES). Cambiando estado a CUT_OFF")
             
             // Cambiar estado a CORTADO
             val cutOffStatus = connectionStatusTypeRepository.findByCodeAndActive("CUT_OFF", true)
                 .orElse(null)
+                
             if (cutOffStatus != null) {
                 partner.connectionStatus = cutOffStatus
                 partner.statusChangedAt = OffsetDateTime.now()
-                
-                // Aplicar multa por el corte inicial
-                val disconnectionFine = BillConceptItemEntity(
-                    waterBill = bill,
-                    conceptName = "Multa por corte de servicio (Mora acumulada de $mesesParaCorte meses)",
-                    assignedDate = LocalDate.now(),
-                    amount = multaCorteMonto
-                )
-                billConceptItemRepository.save(disconnectionFine)
-                
-                // Actualizar totales de la factura
-                bill.totalAmount = bill.totalAmount.add(multaCorteMonto)
-                bill.remainingBalance = bill.remainingBalance.add(multaCorteMonto)
-                waterBillRepository.save(bill)
-                
-                // Actualizar deuda del socio
-                partner.currentDebt = partner.currentDebt.add(multaCorteMonto)
             }
         }
-        // Nota: El recargo recurrente por permanecer en estado CORTADO se maneja ahora en createDefaultBillConcepts
     }
 
     fun getBillsByPartner(partnerId: UUID): List<WaterBillOutputDto> {
@@ -624,21 +610,31 @@ class WaterBillingService(
                     )
                 )
                 
-                // Recargo recurrente cada X meses para socios CORTADOS
-                if (isCutOff) {
-                    val statusChangedAt = bill.partner.statusChangedAt ?: bill.partner.createdAt
-                    val currentBillMonth = assignedDate.withDayOfMonth(1)
-                    val statusMonth = statusChangedAt.toLocalDate().withDayOfMonth(1)
-                    val monthsInStatus = ChronoUnit.MONTHS.between(statusMonth, currentBillMonth)
+                // --- LÓGICA DE MULTA POR MORA ---
+                // Se genera cada N facturas pendientes previas. Independiente de si está CORTADO o no.
+                val previousUnpaidBills = waterBillRepository.findByPartnerIdAndStatusCodesInAndActive(
+                    bill.partner.id,
+                    listOf("PENDING", "OVERDUE", "PARTIAL_PAID"),
+                    true
+                ).filter { it.id != bill.id }.sortedBy { it.billingPeriodStart }
+                
+                val count = previousUnpaidBills.size
+                val mesesParaCorte = billingConfigService.getConfigValue("MESES_PARA_CORTE", BigDecimal("3")).toInt()
+                val montoRecurrente = billingConfigService.getConfigValue("MULTA_CORTE", BigDecimal("50.0")) // usamos MULTA_CORTE o CARGO_POR_CORTE_RECURRENTE
+                
+                // Si la cantidad de facturas vencidas previas es múltiplo exacto (ej: 3, 6, 9)
+                if (count > 0 && count % mesesParaCorte == 0) {
+                    val fineMonths = previousUnpaidBills.takeLast(mesesParaCorte)
+                    val monthNames = arrayOf("", "ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE")
+                    val monthString = fineMonths.joinToString("/") { monthNames[it.billingPeriodStart.monthValue] }
                     
-                    val mesesIntervalo = billingConfigService.getConfigValue("MESES_PARA_CARGO_CORTE", BigDecimal("3")).toLong()
-                    val montoRecurrente = billingConfigService.getConfigValue("CARGO_POR_CORTE_RECURRENTE", BigDecimal("50.0"))
+                    val hasMoraFine = allConcepts.any { it.conceptName.lowercase().contains("mora") || it.conceptName.lowercase().contains("corte") }
                     
-                    if (monthsInStatus > 0 && monthsInStatus % mesesIntervalo == 0L) {
+                    if (!hasMoraFine) {
                         allConcepts.add(
                             BillConceptItemEntity(
                                 waterBill = bill,
-                                conceptName = "Recargo recurrente por estado cortado ($monthsInStatus meses)",
+                                conceptName = "Multa por mora ($monthString)",
                                 assignedDate = assignedDate,
                                 amount = montoRecurrente
                             )

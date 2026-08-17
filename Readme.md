@@ -50,7 +50,7 @@ docker cp <src-path> <container>:<dest-path>
 
 Copy from Contabo
 ```cmd
-scp root@157.173.116.93:/app/myfile.sql ~/Downloads/
+scp root@157.173.116.93:/root/app/myfile.sql ~/Downloads
 ```
 
 Restaure your backup from local to contabo
