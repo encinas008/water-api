@@ -374,7 +374,7 @@ class JobAttendanceService(
         val bills = waterBillRepository.findByPartnerIdAndActive(partner.id, true, Sort.unsorted())
         val bill = bills.firstOrNull { 
             it.billingPeriodStart == periodStart && 
-            it.status.code == "PENDING" 
+            it.status.code in listOf("PENDING", "OVERDUE", "PARTIAL_PAID")
         }
 
         if (bill != null) {
@@ -382,8 +382,10 @@ class JobAttendanceService(
             val conceptName = "Multa Trabajo: ${job.name} ($fineDate)"
             
             val existingConcepts = billConceptItemRepository.findByWaterBillIdAndActive(bill.id, true)
-            // Usar fineId para buscar el concepto exacto asociado a esta asistencia
+            // Usar fineId para buscar el concepto exacto asociado a esta asistencia.
+            // Fallback: conceptos antiguos sin fineId (huérfanos) que coinciden por nombre.
             val existingConcept = existingConcepts.firstOrNull { it.fineId == attendance.id }
+                ?: existingConcepts.firstOrNull { it.fineId == null && it.conceptName == conceptName }
 
             val isExempt = partner.isElderly && !partner.elderlyPaysJobFines
             if (isAbsent && !isExempt) {

@@ -24,8 +24,8 @@ interface WaterBillRepository : JpaRepository<WaterBillEntity, UUID> {
         @Param("periodStart") periodStart: LocalDate
     ): Boolean
 
-    @Query("SELECT b FROM WaterBillEntity b WHERE b.partner.id IN :partnerIds AND b.billingPeriodStart = :periodStart AND b.status.code IN ('PENDING', 'PARTIAL_PAID') AND b.active = true")
-    fun findPendingOrPartialPaidBillsForPartnersInPeriod(
+    @Query("SELECT b FROM WaterBillEntity b WHERE b.partner.id IN :partnerIds AND b.billingPeriodStart = :periodStart AND b.status.code IN ('PENDING', 'PARTIAL_PAID', 'OVERDUE') AND b.active = true")
+    fun findUnpaidBillsForPartnersInPeriod(
         @Param("partnerIds") partnerIds: List<UUID>,
         @Param("periodStart") periodStart: LocalDate
     ): List<WaterBillEntity>

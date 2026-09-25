@@ -698,7 +698,7 @@ class WaterBillingService(
         val concepts = billConceptItemRepository.findByFineId(fineId)
         for (concept in concepts) {
             val bill = concept.waterBill
-            if (bill.status.code == "PENDING" && bill.active) {
+            if (bill.status.code in listOf("PENDING", "OVERDUE", "PARTIAL_PAID") && bill.active) {
                 // Restar el monto de la factura
                 bill.totalAmount = bill.totalAmount.subtract(concept.amount)
                 if (bill.totalAmount < BigDecimal.ZERO) bill.totalAmount = BigDecimal.ZERO
@@ -1130,7 +1130,9 @@ class WaterBillingService(
                 waterBill = savedNewBill,
                 conceptName = oldConcept.conceptName,
                 assignedDate = oldConcept.assignedDate,
-                amount = oldConcept.amount
+                amount = oldConcept.amount,
+                fineType = oldConcept.fineType,
+                fineId = oldConcept.fineId
             )
         }
         billConceptItemRepository.saveAll(newConcepts)

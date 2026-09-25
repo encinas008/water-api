@@ -234,7 +234,7 @@ class MeetingAttendanceService(
         val partnersById = partnerRepository.findAllById(allPartnerIds).associateBy { it.id }
 
         // Optimización N+1: Pre-cargar facturas pendientes
-        val pendingBills = waterBillRepository.findPendingOrPartialPaidBillsForPartnersInPeriod(allPartnerIds.toList(), periodStart)
+        val pendingBills = waterBillRepository.findUnpaidBillsForPartnersInPeriod(allPartnerIds.toList(), periodStart)
         val pendingBillsByPartnerId = pendingBills.associateBy { it.partner.id }
 
         val attendancesToSave = mutableListOf<MeetingAttendanceEntity>()
@@ -375,7 +375,7 @@ class MeetingAttendanceService(
             val bills = waterBillRepository.findByPartnerIdAndActive(partner.id, true, Sort.unsorted())
             bills.firstOrNull { 
                 it.billingPeriodStart == periodStart && 
-                it.status.code == "PENDING" 
+                it.status.code in listOf("PENDING", "OVERDUE", "PARTIAL_PAID")
             }
         }
 
@@ -385,10 +385,15 @@ class MeetingAttendanceService(
             // Si es falta, se usa la multa de la reunión. Si es retraso, se usa lateFine.
             val typeExtra = if (hasLateFine) " (RETRASO)" else ""
             val conceptName = "Multa Reunión: ${meeting.name}$typeExtra ($fineDate)"
+            val baseConceptName = "Multa Reunión: ${meeting.name} ($fineDate)"
             
             val existingConcepts = billConceptItemRepository.findByWaterBillIdAndActive(bill.id, true)
-            // Usar fineId para buscar el concepto exacto asociado a esta asistencia
+            // Usar fineId para buscar el concepto exacto asociado a esta asistencia.
+            // Fallback: conceptos antiguos sin fineId (huérfanos) que coinciden por nombre.
             val existingConcept = existingConcepts.firstOrNull { it.fineId == attendance.id }
+                ?: existingConcepts.firstOrNull {
+                    it.fineId == null && (it.conceptName == conceptName || it.conceptName == baseConceptName)
+                }
 
             val isExempt = partner.isElderly && !partner.elderlyPaysMeetingFines
             val shouldHaveFine = (isAbsent || hasLateFine) && !isExempt
