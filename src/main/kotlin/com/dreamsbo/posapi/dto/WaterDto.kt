@@ -12,7 +12,8 @@ data class WaterMeterReadingInputDto(
     val currentReading: BigDecimal,
     val observation: String = "",
     val imageId: UUID? = null,
-    val userId: UUID? = null  // Opcional: usuario que registra la lectura
+    val userId: UUID? = null,  // Opcional: usuario que registra la lectura
+    val resetCounter: Boolean = false  // Reinicia el contador: la lectura anterior se toma como 0
 )
 
 data class WaterMeterReadingOutputDto(
@@ -28,13 +29,15 @@ data class WaterMeterReadingOutputDto(
     val observation: String,
     val imageUrl: String?,
     val createdAt: OffsetDateTime,
-    val updatedAt: OffsetDateTime?
+    val updatedAt: OffsetDateTime?,
+    val resetCounter: Boolean = false
 )
 
 data class WaterMeterReadingUpdateDto(
     val readingDate: LocalDate?,
     val currentReading: BigDecimal?,
-    val observation: String?
+    val observation: String?,
+    val resetCounter: Boolean? = null
 )
 
 // Water Bill DTOs

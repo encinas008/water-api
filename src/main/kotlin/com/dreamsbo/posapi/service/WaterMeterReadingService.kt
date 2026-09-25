@@ -53,10 +53,17 @@ class WaterMeterReadingService(
         val previousReadingEntity = waterMeterReadingRepository.findLatestByPartnerIdBeforeDate(
             input.partnerId, true, input.readingDate
         )
-        val previousReading = previousReadingEntity.map { it.currentReading }.orElse(BigDecimal.ZERO)
+        // Si el usuario marcó "reiniciar contador" (ej. cambio de medidor), la lectura inicia desde 0
+        val previousReading = if (input.resetCounter) {
+            BigDecimal.ZERO
+        } else {
+            previousReadingEntity.map { it.currentReading }.orElse(BigDecimal.ZERO)
+        }
 
         // Si el usuario marca 0, se busca la última lectura NO-CERO anterior a la fecha
-        val currentReading = if (input.currentReading.compareTo(BigDecimal.ZERO) == 0) {
+        val currentReading = if (input.resetCounter) {
+            input.currentReading
+        } else if (input.currentReading.compareTo(BigDecimal.ZERO) == 0) {
             waterMeterReadingRepository.findLatestNonZeroByPartnerIdBeforeDate(
                 input.partnerId, true, input.readingDate
             )
@@ -92,7 +99,8 @@ class WaterMeterReadingService(
             consumption = consumption,
             readerUser = readerUser, // Usuario que registra la lectura (opcional)
             observation = input.observation,
-            image = image
+            image = image,
+            isReset = input.resetCounter
         )
 
         val savedReading = waterMeterReadingRepository.save(reading)
@@ -144,12 +152,18 @@ class WaterMeterReadingService(
         input.observation?.let { reading.observation = it }
 
         input.currentReading?.let { newReadingValue ->
-            val finalReading = if (newReadingValue.compareTo(BigDecimal.ZERO) == 0) {
+            val finalReading = if (input.resetCounter == true) {
+                newReadingValue
+            } else if (newReadingValue.compareTo(BigDecimal.ZERO) == 0) {
                 waterMeterReadingRepository.findLatestNonZeroByPartnerId(reading.partner.id, true)
                     .map { it.currentReading }
                     .orElse(reading.previousReading)
             } else {
                 newReadingValue
+            }
+
+            if (input.resetCounter == true) {
+                reading.previousReading = BigDecimal.ZERO
             }
 
             if (finalReading < reading.previousReading) {
@@ -158,6 +172,8 @@ class WaterMeterReadingService(
             reading.currentReading = finalReading
             reading.consumption = finalReading - reading.previousReading
         }
+
+        input.resetCounter?.let { reading.isReset = it }
 
         reading.updatedAt = OffsetDateTime.now()
 
@@ -262,7 +278,8 @@ class WaterMeterReadingService(
             observation = entity.observation,
             imageUrl = entity.image?.url,
             createdAt = entity.createdAt,
-            updatedAt = entity.updatedAt
+            updatedAt = entity.updatedAt,
+            resetCounter = entity.isReset
         )
     }
 }

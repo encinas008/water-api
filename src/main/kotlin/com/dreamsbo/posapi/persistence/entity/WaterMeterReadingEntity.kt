@@ -34,6 +34,9 @@ data class WaterMeterReadingEntity(
     @Column(name = "consumption")
     var consumption: BigDecimal,
 
+    @Column(name = "is_reset")
+    var isReset: Boolean = false,
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "reader_user_id")
     @OnDelete(action = OnDeleteAction.CASCADE)

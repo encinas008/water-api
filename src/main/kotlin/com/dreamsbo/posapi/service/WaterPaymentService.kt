@@ -82,30 +82,50 @@ class WaterPaymentService(
                 bill.billingPeriodStart.monthValue, 
                 bill.billingPeriodStart.year
             )
-            
-            // Filtrar multas que ya están en la factura como conceptos (evitar doble cobro)
+
+            // --- SOLUCIÓN 1: La Factura como Única Fuente de Verdad ---
+            // Filtrar por fine_id (FK exacta) en lugar de búsqueda frágil por texto/fecha.
+            // Si una inasistencia ya aparece como concepto de la factura (fine_id coincide),
+            // ya fue cobrada al emitir la factura → no se vuelve a cobrar al pagar.
             val billedConcepts = billConceptItemRepository.findByWaterBillIdAndActive(bill.id, true)
-            
+            val billedFineIds: Set<UUID> = billedConcepts.mapNotNull { it.fineId }.toSet()
+
             val filteredJobs = allPendingFines.jobAbsences.filter { fine ->
-                val formattedDateLower = formatDateLiteral(fine.date).lowercase()
-                val isAlreadyBilled = billedConcepts.any { concept ->
-                    val conceptNameLower = concept.conceptName.lowercase()
-                    conceptNameLower.contains(formattedDateLower) &&
-                    (conceptNameLower.contains("multa") || conceptNameLower.contains("aull")) &&
-                    concept.amount.compareTo(fine.fine) == 0
+                val alreadyBilledByFineId = fine.id != null && billedFineIds.contains(fine.id)
+                if (alreadyBilledByFineId) {
+                    // La multa ya está incluida en la factura → no sumar extra
+                    false
+                } else {
+                    // fine_id no vinculado: fallback por texto/fecha para compatibilidad
+                    // con multas antiguas que aún no tienen fine_id en bill_concept_item
+                    val formattedDateLower = formatDateLiteral(fine.date).lowercase()
+                    val alreadyBilledByText = billedConcepts.any { concept ->
+                        val conceptNameLower = concept.conceptName.lowercase()
+                        conceptNameLower.contains(formattedDateLower) &&
+                        (conceptNameLower.contains("multa") || conceptNameLower.contains("aull")) &&
+                        concept.amount.compareTo(fine.fine) == 0
+                    }
+                    !alreadyBilledByText
                 }
-                !isAlreadyBilled
             }
-            
+
             val filteredMeetings = allPendingFines.meetingAbsences.filter { fine ->
-                val formattedDateLower = formatDateLiteral(fine.date).lowercase()
-                val isAlreadyBilled = billedConcepts.any { concept ->
-                    val conceptNameLower = concept.conceptName.lowercase()
-                    conceptNameLower.contains(formattedDateLower) &&
-                    (conceptNameLower.contains("multa") || conceptNameLower.contains("aull")) &&
-                    concept.amount.compareTo(fine.fine) == 0
+                val alreadyBilledByFineId = fine.id != null && billedFineIds.contains(fine.id)
+                if (alreadyBilledByFineId) {
+                    // La multa ya está incluida en la factura → no sumar extra
+                    false
+                } else {
+                    // fine_id no vinculado: fallback por texto/fecha para compatibilidad
+                    // con multas antiguas que aún no tienen fine_id en bill_concept_item
+                    val formattedDateLower = formatDateLiteral(fine.date).lowercase()
+                    val alreadyBilledByText = billedConcepts.any { concept ->
+                        val conceptNameLower = concept.conceptName.lowercase()
+                        conceptNameLower.contains(formattedDateLower) &&
+                        (conceptNameLower.contains("multa") || conceptNameLower.contains("aull")) &&
+                        concept.amount.compareTo(fine.fine) == 0
+                    }
+                    !alreadyBilledByText
                 }
-                !isAlreadyBilled
             }
 
             pendingFinesAmount = filteredJobs.sumOf { it.fine } + filteredMeetings.sumOf { it.fine }
