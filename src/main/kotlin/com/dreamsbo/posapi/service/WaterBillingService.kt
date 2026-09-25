@@ -1019,6 +1019,60 @@ class WaterBillingService(
     }
 
     @Transactional
+    fun unwaiveBill(id: UUID): WaterBillOutputDto {
+        val bill = waterBillRepository.findById(id)
+            .orElseThrow { NotFoundEntityException("No se ha encontrado la factura. BillId = $id") }
+
+        if (bill.status.code != "WAIVED") {
+            throw BadRequestException("La factura no está condonada")
+        }
+
+        // Reconstruir el estado real a partir de los pagos activos que quedaron registrados
+        val paidAmount = waterPaymentRepository.findByWaterBillIdAndActive(bill.id, true)
+            .fold(BigDecimal.ZERO) { acc, payment -> acc.add(payment.amount) }
+            .min(bill.totalAmount)
+        val restoredBalance = bill.totalAmount.subtract(paidAmount)
+
+        val newStatus = when {
+            restoredBalance <= BigDecimal.ZERO ->
+                billStatusTypeRepository.findByCodeAndActive("PAID", true)
+                    .orElseThrow { NotFoundEntityException("Estado PAID no encontrado") }
+            paidAmount > BigDecimal.ZERO ->
+                billStatusTypeRepository.findByCodeAndActive("PARTIAL_PAID", true)
+                    .orElseThrow { NotFoundEntityException("Estado PARTIAL_PAID no encontrado") }
+            else ->
+                billStatusTypeRepository.findByCodeAndActive("PENDING", true)
+                    .orElseThrow { NotFoundEntityException("Estado PENDING no encontrado") }
+        }
+
+        bill.status = newStatus
+        bill.paidAmount = paidAmount
+        bill.remainingBalance = restoredBalance
+        bill.paidDate = if (restoredBalance <= BigDecimal.ZERO) bill.paidDate else null
+        bill.waivedBy = null
+        bill.updatedAt = OffsetDateTime.now()
+
+        val savedBill = waterBillRepository.save(bill)
+
+        // Restaurar la deuda del socio por el saldo que se había condonado
+        val partner = bill.partner
+        partner.currentDebt = partner.currentDebt.add(restoredBalance)
+
+        // Re-evaluar el corte: si vuelve a acumular 4 o más facturas impagas
+        val unpaidBillsCount = waterBillRepository.countUnpaidBillsByPartnerId(partner.id)
+        if (unpaidBillsCount >= 4) {
+            val cutOffStatus = connectionStatusTypeRepository.findByCodeAndActive("CUT_OFF", true).orElse(null)
+            if (cutOffStatus != null) {
+                partner.connectionStatus = cutOffStatus
+            }
+        }
+
+        partnerRepository.save(partner)
+
+        return toWaterBillOutputDto(savedBill)
+    }
+
+    @Transactional
     fun cancelBill(id: UUID, userId: UUID): WaterBillOutputDto {
         val bill = waterBillRepository.findById(id)
             .orElseThrow { NotFoundEntityException("No se ha encontrado la factura. BillId = $id") }
