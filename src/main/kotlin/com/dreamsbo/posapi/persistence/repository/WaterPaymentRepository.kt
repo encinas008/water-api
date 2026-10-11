@@ -4,7 +4,9 @@ import com.dreamsbo.posapi.persistence.entity.WaterPaymentEntity
 import org.springframework.data.domain.Sort
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
+import org.springframework.data.repository.query.Param
 import org.springframework.stereotype.Repository
+import java.math.BigDecimal
 import java.time.LocalDate
 import java.util.*
 
@@ -31,4 +33,7 @@ interface WaterPaymentRepository : JpaRepository<WaterPaymentEntity, UUID> {
 
     @Query("SELECT SUM(p.amount) FROM WaterPaymentEntity p WHERE p.partner.id = :partnerId AND p.active = :active")
     fun sumPaymentsByPartnerId(partnerId: UUID, active: Boolean): Double?
+
+    @Query("SELECT COALESCE(SUM(p.amount), 0) FROM WaterPaymentEntity p WHERE p.waterBill.id = :billId AND p.active = true")
+    fun sumAmountByWaterBillId(@Param("billId") billId: UUID): BigDecimal?
 }

@@ -166,6 +166,8 @@ data class WaterPaymentOutputDto(
     val id: UUID,
     val waterBillId: UUID?,
     val billNumber: String?,
+    val billingMonth: Int? = null, // Mes de la factura cobrada (1-12)
+    val billingYear: Int? = null,  // Año de la factura cobrada
     val partnerId: UUID,
     val partnerName: String,
     val partnerNumber: Long?,
@@ -177,6 +179,11 @@ data class WaterPaymentOutputDto(
     val observation: String,
     val correlativeNumber: Int? = null,
     val paymentDetail: PaymentDetailDto? = null, // Detalle del pago incluyendo multas
+    val billTotalAmount: BigDecimal? = null,      // Total facturado de la factura asociada
+    val billPaidAmount: BigDecimal? = null,       // Total realmente pagado de la factura
+    val billRemainingBalance: BigDecimal? = null, // Saldo de la factura (0 si no debe)
+    val billStatusCode: String? = null,           // Estado de la factura (PAID, PENDING, ...)
+    val billConcepts: List<BillConceptItemDto> = emptyList(), // Conceptos que cubre la factura
     val createdAt: OffsetDateTime
 )
 

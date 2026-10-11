@@ -253,7 +253,9 @@ class WaterPaymentService(
             true,
             Sort.by(Sort.Direction.DESC, "paymentDate")
         )
-        return payments.map { toWaterPaymentOutputDto(it) }
+        val billPaidMap = buildBillPaidMap(payments)
+        val billConceptsMap = buildBillConceptsMap(payments)
+        return payments.map { toWaterPaymentOutputDto(it, billPaidMap, billConceptsMap) }
     }
 
     fun getPaymentHistory(partnerId: UUID): List<WaterPaymentOutputDto> {
@@ -262,8 +264,35 @@ class WaterPaymentService(
             true,
             Sort.by(Sort.Direction.DESC, "paymentDate")
         )
-        return payments.map { toWaterPaymentOutputDto(it) }
+        val billPaidMap = buildBillPaidMap(payments)
+        val billConceptsMap = buildBillConceptsMap(payments)
+        return payments.map { toWaterPaymentOutputDto(it, billPaidMap, billConceptsMap) }
     }
+
+    /** Mapa factura -> total pagado, para calcular el saldo sin consultas N+1 */
+    private fun buildBillPaidMap(payments: List<WaterPaymentEntity>): Map<UUID, BigDecimal> =
+        payments.filter { it.waterBill != null }
+            .groupBy { it.waterBill!!.id }
+            .mapValues { entry ->
+                entry.value.fold(BigDecimal.ZERO) { acc, p -> acc.add(p.amount) }
+            }
+
+    /** Mapa factura -> conceptos activos, para mostrarlos en el detalle sin consultas N+1 */
+    private fun buildBillConceptsMap(payments: List<WaterPaymentEntity>): Map<UUID, List<BillConceptItemDto>> {
+        val billIds = payments.mapNotNull { it.waterBill?.id }.distinct()
+        if (billIds.isEmpty()) return emptyMap()
+        return billConceptItemRepository.findByWaterBillIdInAndActive(billIds, true)
+            .groupBy { it.waterBill.id }
+            .mapValues { entry -> entry.value.map { toConceptDto(it) } }
+    }
+
+    private fun toConceptDto(concept: com.dreamsbo.posapi.persistence.entity.BillConceptItemEntity) =
+        BillConceptItemDto(
+            id = concept.id,
+            conceptName = concept.conceptName,
+            assignedDate = concept.assignedDate,
+            amount = concept.amount
+        )
 
     fun getPaymentById(id: UUID): WaterPaymentOutputDto {
         val payment = waterPaymentRepository.findById(id)
@@ -584,7 +613,11 @@ class WaterPaymentService(
         return payments.map { toWaterPaymentOutputDto(it) }
     }
 
-    private fun toWaterPaymentOutputDto(entity: WaterPaymentEntity): WaterPaymentOutputDto {
+    private fun toWaterPaymentOutputDto(
+        entity: WaterPaymentEntity,
+        billPaidMap: Map<UUID, BigDecimal> = emptyMap(),
+        billConceptsMap: Map<UUID, List<BillConceptItemDto>> = emptyMap()
+    ): WaterPaymentOutputDto {
         // Obtener detalle de pago desde la base de datos
         val paymentDetails = waterPaymentDetailRepository.findByWaterPaymentIdAndActive(entity.id, true)
         
@@ -634,10 +667,28 @@ class WaterPaymentService(
             )
         }
         
+        // Saldo de la factura asociada (total - pagado, nunca negativo)
+        val bill = entity.waterBill
+        val billPaidAmount: BigDecimal? = bill?.let {
+            billPaidMap[it.id] ?: (waterPaymentRepository.sumAmountByWaterBillId(it.id) ?: BigDecimal.ZERO)
+        }
+        val billRemainingBalance: BigDecimal? = if (bill != null && billPaidAmount != null) {
+            val diff = bill.totalAmount.subtract(billPaidAmount)
+            if (diff < BigDecimal.ZERO) BigDecimal.ZERO else diff
+        } else null
+
+        // Conceptos que cubre la factura (mora, tarifa, aportes, etc.)
+        val billConcepts: List<BillConceptItemDto> = bill?.let {
+            billConceptsMap[it.id] ?: billConceptItemRepository.findByWaterBillIdAndActive(it.id, true)
+                .map { c -> toConceptDto(c) }
+        } ?: emptyList()
+
         return WaterPaymentOutputDto(
             id = entity.id,
             waterBillId = entity.waterBill?.id,
             billNumber = entity.waterBill?.billNumber,
+            billingMonth = entity.waterBill?.billingPeriodStart?.monthValue,
+            billingYear = entity.waterBill?.billingPeriodStart?.year,
             partnerId = entity.partner.id,
             partnerName = entity.partner.fullName,
             partnerNumber = entity.partner.partnerNumber,
@@ -649,6 +700,11 @@ class WaterPaymentService(
             observation = entity.observation,
             correlativeNumber = entity.correlativeNumber,
             paymentDetail = paymentDetail,
+            billTotalAmount = bill?.totalAmount,
+            billPaidAmount = billPaidAmount,
+            billRemainingBalance = billRemainingBalance,
+            billStatusCode = bill?.status?.code,
+            billConcepts = billConcepts,
             createdAt = entity.createdAt
         )
     }
